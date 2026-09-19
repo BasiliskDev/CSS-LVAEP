@@ -1,0 +1,162 @@
+// Tutor Attendance & Achievement tracker.
+// Replaces the LVA Essex/Passaic paper form: one sheet per student per fiscal year.
+//
+// SQLite has no native enums, so role/status columns are plain Strings backed by
+// the union types + Zod enums in src/lib/constants.ts.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+/// A tutor account. Doubles as the profile block at the top of the paper form.
+model User {
+  id           String @id @default(cuid())
+  username     String @unique
+  passwordHash String
+  displayName  String
+  role         String @default("TUTOR") // TUTOR | ADMIN
+
+  // Profile, collected during onboarding.
+  phone        String?
+  siteId       String?
+  defaultDays  String?
+  defaultTimes String?
+  onboardedAt  DateTime?
+
+  site     Site?     @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  sessions Session[]
+  students Student[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([siteId])
+}
+
+/// An opaque login session. The token is what lives in the `session` cookie.
+model Session {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+/// A tutoring location, e.g. Bloomfield Public Library.
+model Site {
+  id      String  @id @default(cuid())
+  name    String  @unique
+  address String?
+
+  users    User[]
+  students Student[]
+
+  createdAt DateTime @default(now())
+}
+
+/// The "container" a tutor works in: one student, one fiscal year.
+model Student {
+  id        String @id @default(cuid())
+  tutorId   String
+  firstName String
+  lastName  String
+
+  siteId String?
+  days   String?
+  times  String?
+
+  /// Calendar year of the July that opens this student's fiscal year (2026 => FY 2026-2027).
+  fiscalYearStart Int
+
+  status        String    @default("ACTIVE") // ACTIVE | STOPPED
+  stoppedAt     DateTime?
+  stoppedReason String?
+
+  notes String?
+
+  tutor        User                 @relation(fields: [tutorId], references: [id], onDelete: Cascade)
+  site         Site?                @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  lessons      Lesson[]
+  achievements StudentAchievement[]
+  reports      Report[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tutorId, status])
+  @@index([siteId])
+}
+
+/// One tutoring session. Several on the same day are legal; the grid cell sums them.
+model Lesson {
+  id        String   @id @default(cuid())
+  studentId String
+  date      DateTime
+
+  /// Time slot as "HH:MM" (24h), the way tutors actually record a session.
+  /// Null for absences, and for events logged before time slots existed.
+  startTime String?
+  endTime   String?
+
+  /// Derived from the time slot on save, and the single source for every total.
+  /// Kept as a stored column so totals stay cheap and legacy rows keep working.
+  hours  Float  @default(0)
+  status String @default("HELD") // HELD | TUTOR_ABSENT | STUDENT_ABSENT | HOLIDAY
+
+  topics            String?
+  homeworkAssigned  Boolean @default(false)
+  homeworkCompleted Boolean @default(false)
+  notes             String?
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([studentId, date])
+}
+
+/// Checklist state for one goal. Labels for A1-D4 come from the static catalog in
+/// src/lib/achievements.ts; only custom "E. Other(s)" rows store their own label.
+model StudentAchievement {
+  id         String    @id @default(cuid())
+  studentId  String
+  code       String
+  label      String?
+  attained   Boolean   @default(false)
+  attainedAt DateTime?
+  note       String?
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([studentId, code])
+}
+
+/// A free-form write-up about a student. The paper form had no room for these.
+model Report {
+  id          String    @id @default(cuid())
+  studentId   String
+  title       String
+  periodStart DateTime?
+  periodEnd   DateTime?
+  body        String
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([studentId])
+}

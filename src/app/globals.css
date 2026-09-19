@@ -1,26 +1,77 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/*
+ * A small semantic token set. Components only ever reference these names, so the
+ * light/dark pairs below are the only place colour is decided.
+ */
+@theme {
+  --color-canvas: #f6f7f9;
+  --color-surface: #ffffff;
+  --color-surface-2: #f1f3f6;
+  --color-line: #dfe3e9;
+  --color-line-strong: #c3cad4;
+  --color-ink: #16202e;
+  --color-muted: #5d6b7f;
+  --color-faint: #8a97a8;
+
+  --color-brand: #1f4f8c;
+  --color-brand-strong: #163c6b;
+  --color-brand-soft: #e8f0fa;
+
+  --color-accent: #b26a00;
+  --color-accent-soft: #fdf2e0;
+
+  --color-positive: #1c7048;
+  --color-positive-soft: #e4f4ec;
+  --color-danger: #a8301f;
+  --color-danger-soft: #fbeae7;
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
+/*
+ * Dark palette. These override the raw custom properties rather than re-opening
+ * `@theme` — a nested `@theme` is not supported and silently replaces the light
+ * values instead of conditioning them, which makes the app dark-only.
+ */
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --color-canvas: #10151c;
+    --color-surface: #171d26;
+    --color-surface-2: #1f2733;
+    --color-line: #2b3441;
+    --color-line-strong: #3c4857;
+    --color-ink: #e8edf4;
+    --color-muted: #9aa8ba;
+    --color-faint: #718093;
+
+    --color-brand: #74a6e8;
+    --color-brand-strong: #a3c6f2;
+    --color-brand-soft: #1b2a3f;
+
+    --color-accent: #e0a44a;
+    --color-accent-soft: #33260f;
+
+    --color-positive: #63c294;
+    --color-positive-soft: #14301f;
+    --color-danger: #ef8b79;
+    --color-danger-soft: #331813;
   }
 }
 
+html {
+  color-scheme: light dark;
+}
+
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-canvas);
+  color: var(--color-ink);
+}
+
+/* Keyboard focus that is visible on every surface, including inside the grid. */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
+  border-radius: 3px;
 }
