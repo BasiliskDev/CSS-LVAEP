@@ -1,8 +1,9 @@
 // Tutor Attendance & Achievement tracker.
 // Replaces the LVA Essex/Passaic paper form: one sheet per student per fiscal year.
 //
-// SQLite has no native enums, so role/status columns are plain Strings backed by
-// the union types + Zod enums in src/lib/constants.ts.
+// Role/status columns are plain Strings backed by the union types + Zod enums in
+// src/lib/constants.ts, rather than native enums: the app validates them in one
+// place already, and adding a value stays a code change instead of a migration.
 
 generator client {
   provider = "prisma-client"
@@ -10,7 +11,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
 }
 
 /// A tutor account. Doubles as the profile block at the top of the paper form.

@@ -1,8 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // better-sqlite3 is a native addon; it must stay external to the server bundle.
-  serverExternalPackages: ["better-sqlite3", "@prisma/adapter-better-sqlite3"],
+  // pg opens raw TCP sockets, so it must stay external to the server bundle.
+  serverExternalPackages: ["pg", "@prisma/adapter-pg"],
 };
 
 export default nextConfig;

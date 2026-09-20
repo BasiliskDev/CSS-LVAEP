@@ -10,6 +10,10 @@ export default defineConfig({
     seed: "npx tsx prisma/seed.ts",
   },
   datasource: {
-    url: process.env["DATABASE_URL"],
+    // Migrations run DDL, which is unreliable through a transaction-mode pooler
+    // (PgBouncer / the Neon pooler). Hosts that give you a pooled URL also give you
+    // a direct one — put that in DIRECT_URL and the CLI will prefer it, while the
+    // app keeps using the pooled DATABASE_URL at runtime.
+    url: process.env["DIRECT_URL"] ?? process.env["DATABASE_URL"],
   },
 });

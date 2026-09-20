@@ -15,14 +15,22 @@ written reports per student.
 
 ## Setup
 
-Requires Node 20+. No API keys, no hosted services.
+Requires Node 20+ and a Postgres database.
 
 ```bash
 npm install
-cp .env.example .env          # DATABASE_URL="file:./dev.db"
-npx prisma migrate dev        # create the SQLite database
+cp .env.example .env          # then set DATABASE_URL
+npx prisma migrate deploy     # create the tables
 npx prisma db seed            # seed the site + an office account
 npm run dev                   # http://localhost:3000
+```
+
+For a local database, either point `DATABASE_URL` at your hosted development
+database, or run one in Docker:
+
+```bash
+docker run -d --name tutorlog-db -p 5432:5432 \
+  -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=tutorlog postgres:16
 ```
 
 The seed creates:
@@ -142,10 +150,35 @@ npx vitest run         # unit tests
 npx prisma studio      # browse the database
 ```
 
+## Deploying to Vercel
+
+The app is a standard Next.js server app with one external dependency: Postgres.
+
+1. **Provision Postgres** — Vercel Postgres, Neon, Supabase, Railway; any of them work,
+   since the code targets plain `postgresql` through `@prisma/adapter-pg`.
+2. **Set environment variables** in the Vercel project: `DATABASE_URL` (the **pooled**
+   connection string), `DIRECT_URL` (the unpooled one, used only by the Prisma CLI for
+   migrations — DDL through a transaction-mode pooler is unreliable), and optionally
+   `SEED_ADMIN_USERNAME` / `SEED_ADMIN_PASSWORD`.
+3. **Set the build command** to `npm run vercel-build`, which runs
+   `prisma generate && prisma migrate deploy && next build`. Both steps matter:
+   the generated Prisma client is gitignored, so a build without `prisma generate`
+   fails with `Can't resolve '@/generated/prisma/client'`; and without
+   `migrate deploy` the database has no tables.
+4. **Seed once**, against the hosted database:
+   `DATABASE_URL="<your url>" npx prisma db seed`.
+
+Use a **pooled** connection string. Each serverless instance opens its own pool, so an
+unpooled endpoint runs out of connections under load; `DATABASE_POOL_MAX` (default 3)
+caps the per-instance size.
+
+Before putting a real roster behind a public URL, read the security section above —
+the auth is prototype-grade and has no password reset, rate limiting or CSRF tokens.
+
 ## Stack
 
-Next.js 16 (App Router, Server Actions) · React 19 · Prisma 7 over SQLite via
-`better-sqlite3` · Tailwind v4 · Zod · Vitest.
+Next.js 16 (App Router, Server Actions) · React 19 · Prisma 7 over Postgres via
+`@prisma/adapter-pg` · Tailwind v4 · Zod · Vitest.
 
 Notes on versions: Next 16 renames `middleware.ts` to **`proxy.ts`**, `cookies()` is
 async, and route `params` is a `Promise`. Prisma 7 requires a **driver adapter** and
@@ -153,4 +186,4 @@ generates its client into `src/generated/prisma` (gitignored — run `npx prisma
 after a fresh clone).
 
 `npm audit` reports advisories in `mysql2` and `deepmerge-ts`. Both are transitive
-dependencies of the Prisma **CLI** only; this project uses SQLite and ships neither.
+dependencies of the Prisma **CLI** only; neither is shipped by this app.
