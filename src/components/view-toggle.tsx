@@ -2,23 +2,17 @@ import Link from "next/link";
 
 import { cx } from "@/components/ui";
 
-/** List / Calendar switch. Server-rendered links so the view is linkable and shareable. */
+/** List / Grid switch. Server-rendered links so the view is linkable and shareable. */
 export function ViewToggle({
   basePath,
   view,
-  monthParam,
 }: {
   basePath: string;
-  view: "list" | "calendar";
-  monthParam: string;
+  view: "list" | "grid";
 }) {
   const options = [
     { key: "list" as const, label: "List", href: `${basePath}?view=list` },
-    {
-      key: "calendar" as const,
-      label: "Calendar",
-      href: `${basePath}?view=calendar&month=${monthParam}`,
-    },
+    { key: "grid" as const, label: "Grid", href: `${basePath}?view=grid` },
   ];
 
   return (

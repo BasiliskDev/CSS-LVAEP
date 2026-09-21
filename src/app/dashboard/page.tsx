@@ -37,7 +37,14 @@ export default async function DashboardPage() {
             One record per student, as the paper form required.
           </p>
         </div>
-        <ButtonLink href="/students/new">Add student</ButtonLink>
+        <div className="flex flex-wrap gap-2">
+          {students.length > 0 ? (
+            <ButtonLink href="/print" variant="secondary">
+              Print all forms
+            </ButtonLink>
+          ) : null}
+          <ButtonLink href="/students/new">Add student</ButtonLink>
+        </div>
       </div>
 
       <div className="mb-8 grid gap-3 sm:grid-cols-3">

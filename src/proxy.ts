@@ -27,6 +27,7 @@ export const config = {
     "/dashboard/:path*",
     "/students/:path*",
     "/calendar/:path*",
+    "/print/:path*",
     "/admin/:path*",
     "/onboarding",
   ],

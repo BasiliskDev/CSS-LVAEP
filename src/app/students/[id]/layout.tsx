@@ -4,7 +4,7 @@ import { AppShell } from "@/components/app-shell";
 import { StudentTabs } from "@/components/student-tabs";
 import { requireStudent } from "@/lib/guards";
 import { fiscalYearLabel } from "@/lib/fiscal-year";
-import { Badge } from "@/components/ui";
+import { Badge, ButtonLink } from "@/components/ui";
 
 export default async function StudentLayout({
   children,
@@ -24,6 +24,13 @@ export default async function StudentLayout({
           <h1 className="text-2xl font-semibold text-ink">
             {student.firstName} {student.lastName}
           </h1>
+          <ButtonLink
+            href={`/students/${student.id}/print`}
+            variant="secondary"
+            size="sm"
+          >
+            Print form
+          </ButtonLink>
           {student.status === "STOPPED" ? (
             <Badge tone="danger">Stopped</Badge>
           ) : (

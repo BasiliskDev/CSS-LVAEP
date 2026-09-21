@@ -75,3 +75,46 @@ body {
   outline-offset: 2px;
   border-radius: 3px;
 }
+
+/*
+ * Print: the form is a landscape sheet. On screen the print routes show a preview on
+ * a grey ground with a toolbar; printing drops all of that and leaves only the sheet.
+ */
+.print-sheet {
+  width: 10.2in;
+}
+
+@media print {
+  @page {
+    size: landscape;
+    margin: 0.3in;
+  }
+
+  body {
+    background: #fff;
+  }
+
+  /* Anything not part of a sheet — toolbars, nav, buttons — is screen-only. */
+  .no-print {
+    display: none !important;
+  }
+
+  .print-sheet {
+    width: 100%;
+    box-shadow: none;
+    /* Each student's form starts its own page; the last one adds no blank page. */
+    break-after: page;
+    page-break-after: always;
+  }
+
+  .print-sheet:last-of-type {
+    break-after: auto;
+    page-break-after: auto;
+  }
+
+  /* Keep the filled cells legible in mono print, where colour is lost. */
+  .print-sheet * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}

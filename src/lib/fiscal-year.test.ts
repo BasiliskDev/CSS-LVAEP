@@ -3,6 +3,7 @@ import {
   buildCalendarWeeks,
   calendarYearForFiscalMonth,
   daysInMonthUTC,
+  fiscalCellKey,
   fiscalMonthIndexFor,
   fiscalYearLabel,
   fiscalYearRange,
@@ -235,5 +236,34 @@ describe("month navigation", () => {
     expect(parseMonthParam("2026-13")).toBeNull();
     expect(parseMonthParam("nonsense")).toBeNull();
     expect(parseMonthParam("2026-9")).toBeNull();
+  });
+});
+
+describe("fiscalCellKey", () => {
+  it("maps a grid cell to the right calendar date", () => {
+    // Jul is column 0 and belongs to the opening year.
+    expect(fiscalCellKey(2026, 0, 2)).toBe("2026-07-02");
+    // Dec is column 5, still the opening year.
+    expect(fiscalCellKey(2026, 5, 25)).toBe("2026-12-25");
+    // Jan rolls into the following year.
+    expect(fiscalCellKey(2026, 6, 1)).toBe("2027-01-01");
+    expect(fiscalCellKey(2026, 11, 30)).toBe("2027-06-30");
+  });
+
+  it("returns null for days the month does not have", () => {
+    expect(fiscalCellKey(2026, 7, 29)).toBeNull(); // Feb 2027, common year
+    expect(fiscalCellKey(2027, 7, 29)).toBe("2028-02-29"); // Feb 2028, leap year
+    expect(fiscalCellKey(2026, 11, 31)).toBeNull(); // June has 30 days
+    expect(fiscalCellKey(2026, 0, 32)).toBeNull();
+    expect(fiscalCellKey(2026, 0, 0)).toBeNull();
+  });
+
+  it("lines up with the attendance summary it is used to index", () => {
+    const summary = summarizeAttendance(
+      [lesson("2026-09-18", 2), lesson("2026-12-25", 0, "HOLIDAY")],
+      2026,
+    );
+    expect(summary.byDate.get(fiscalCellKey(2026, 2, 18)!)).toMatchObject({ hours: 2 });
+    expect(summary.byDate.get(fiscalCellKey(2026, 5, 25)!)).toMatchObject({ code: "H" });
   });
 });

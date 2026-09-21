@@ -213,6 +213,25 @@ export function totalHeldHours(lessons: AttendanceLesson[]): number {
   );
 }
 
+/**
+ * ISO date key for one cell of the paper form's 31 x 12 grid, or null when that day
+ * doesn't exist in that month (Feb 30, Jun 31). Lets the grid — on screen and in
+ * print — read straight out of `AttendanceSummary.byDate`.
+ */
+export function fiscalCellKey(
+  fiscalYearStart: number,
+  monthIndex: number,
+  day: number,
+): string | null {
+  const { month } = FISCAL_MONTHS[monthIndex];
+  const year = calendarYearForFiscalMonth(fiscalYearStart, monthIndex);
+  if (day < 1 || day > daysInMonthUTC(year, month)) return null;
+  return `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+/** Row numbers down the left of the printed grid. */
+export const DAYS_IN_GRID = 31;
+
 // --- Calendar layout ------------------------------------------------------------
 
 export const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;

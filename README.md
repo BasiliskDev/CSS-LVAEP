@@ -48,7 +48,9 @@ Tutors sign themselves up at `/register`.
 | `/onboarding` | Tutor name, phone, site, usual days/times — the form's header block. Doubles as the profile editor afterwards. |
 | `/dashboard` | The tutor's students, split Active / Stopped, with hours this month and this year. |
 | `/students/[id]` | **Overview** — student details and the STOPPED box (reason required). |
-| `…/attendance` | Every tutoring event, as a **list** or a **calendar**, plus the Jul–Jun monthly totals. |
+| `…/attendance` | Every tutoring event, as a **list** or the **grid**, plus the Jul–Jun monthly totals. |
+| `…/print` | The filled paper form for one student, ready to print. |
+| `/print` | Every student's form, one page each, printed in a single run. |
 | `…/achievements` | The 17-item checklist plus custom goals. |
 | `…/reports` | Written progress reports. |
 | `/calendar` | **Global calendar** — every event across all your students in one month view. |
@@ -60,18 +62,31 @@ Every tutoring event is added by hand and stored as its own row. Nothing is infe
 
 - **List** (default) — newest first, grouped by month with an hours subtotal and an
   event count per month. Edit or delete any event inline.
-- **Calendar** — a month grid. Each day shows the events logged on it; clicking a day's
-  `+` opens the form prefilled with that date, and clicking an event opens it for
-  editing. Arrows page between months, `Today` jumps back. The view and month live in
-  the URL (`?view=calendar&month=2026-09`), so any month is linkable.
+- **Grid** — the paper form's own layout: 31 day-rows by 12 month-columns, Jul through
+  Jun, with a total per month. Read-only by construction, since it is derived from the
+  events, so its totals cannot disagree with the log. Days a month doesn't have (Feb 30,
+  Jun 31) are greyed rather than left blank.
 
-Both views sit above a **monthly totals** strip — Jul through Jun plus a grand total —
-which is the one thing the paper grid genuinely did well.
+The view lives in the URL (`?view=grid`), so either is linkable.
+
+### Printing
+
+Two buttons produce the original paper form, filled in:
+
+- **Print form** on a student — `/students/[id]/print`
+- **Print all forms** on the dashboard — `/print`, one page per student, active students
+  by default, with a link to include stopped ones
+
+Both render the same [`PrintableForm`](src/components/printable-form.tsx): a landscape
+sheet with the attendance grid on the left and the achievements checklist on the right,
+ticks on attained goals, the STOPPED box, and the tutoring site / day(s) / time(s) strip
+— plain black rules on white so it photocopies like the original. The on-screen toolbar
+carries `no-print`, so only the sheet itself reaches the paper.
 
 ### Global calendar
 
-`/calendar` answers the question a per-student page cannot: *what does my week actually
-look like?* It shows every event across all of a tutor's students in one month, each chip
+The calendar is now a cross-student view only. `/calendar` answers the question a
+per-student page cannot: *what does my week actually look like?* It shows every event across all of a tutor's students in one month, each chip
 labelled with the student, plus a per-student hours breakdown for that month. Clicking an
 event opens that student's own calendar on the same month.
 
@@ -81,9 +96,8 @@ on a shared day. Logging happens on a student's page.
 Signed in as an `ADMIN`, the same page widens to every tutor's events and names the tutor
 on each chip — the office's version of the same question.
 
-Both calendars share one scaffold, [`CalendarMonth`](src/components/calendar-month.tsx),
-which owns the month navigation, weekday row and day cells. The two callers supply only
-the chips and the per-day action, which is the sole thing that differs between them.
+It is built on [`CalendarMonth`](src/components/calendar-month.tsx), which owns the month
+navigation, weekday row and day cells.
 
 ### Hours come from the time slot
 
