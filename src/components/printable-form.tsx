@@ -84,11 +84,7 @@ export function PrintableForm({
             (For Internal Use Only: <b>TA</b>: Tutor Absent <b>SA</b>: Student Absent <b>H</b>: Holiday)
           </p>
 
-          <AttendanceGrid
-            summary={summary}
-            fiscalYearStart={student.fiscalYearStart}
-            variant="print"
-          />
+          <AttendanceGrid summary={summary} fiscalYearStart={student.fiscalYearStart} />
         </section>
 
         <aside className="w-60 p-2 text-[7.5pt] leading-tight">

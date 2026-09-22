@@ -9,48 +9,37 @@ import {
 import { cx } from "@/components/ui";
 
 /**
- * The paper form's grid: 31 day-rows by 12 month-columns, Jul through Jun, with a
- * total per column. Read-only by construction — it renders an AttendanceSummary
- * derived from the logged events, so its totals cannot disagree with the log.
+ * The paper form's 31 x 12 grid, Jul through Jun, with a total per column.
  *
- * `variant="print"` drops the colour and screen affordances so it photocopies like
- * the original: plain black rules on white, tight rows, nothing but ink.
+ * This is the printed layout only — on screen the calendar shows the same hours
+ * against real weekdays, which is easier to read. Styled as plain black rules on
+ * white so it photocopies like the original.
  */
 export function AttendanceGrid({
   summary,
   fiscalYearStart,
-  variant = "screen",
 }: {
   summary: AttendanceSummary;
   fiscalYearStart: number;
-  variant?: "screen" | "print";
 }) {
   const days = Array.from({ length: DAYS_IN_GRID }, (_, i) => i + 1);
-  const print = variant === "print";
-
-  const cellBorder = print ? "border border-black" : "border border-line";
-  const headBg = print ? "" : "bg-surface-2";
+  const cell = "border border-black p-0.5";
 
   return (
-    <table
-      className={cx(
-        "w-full border-collapse text-center tabular-nums",
-        print ? "text-[7pt] leading-none" : "min-w-[640px] text-xs",
-      )}
-    >
+    <table className="w-full border-collapse text-center text-[7pt] leading-none tabular-nums">
       <caption className="sr-only">
         Hours tutored by day and month, {fiscalYearLabel(fiscalYearStart)}
       </caption>
       <thead>
         <tr>
-          <th scope="col" className={cx(cellBorder, headBg, print ? "w-5 p-0.5" : "w-10 p-1.5")}>
+          <th scope="col" className={cx(cell, "w-5")}>
             <span className="sr-only">Day of month</span>
           </th>
           {FISCAL_MONTHS.map((month, index) => (
             <th
               key={month.label}
               scope="col"
-              className={cx(cellBorder, headBg, "font-bold", print ? "p-0.5" : "p-1.5 text-ink")}
+              className={cx(cell, "font-bold")}
               title={`${month.label} ${calendarYearForFiscalMonth(fiscalYearStart, index)}`}
             >
               {month.label}
@@ -62,42 +51,20 @@ export function AttendanceGrid({
       <tbody>
         {days.map((day) => (
           <tr key={day}>
-            <th
-              scope="row"
-              className={cx(
-                cellBorder,
-                headBg,
-                "font-medium",
-                print ? "p-0.5" : "p-1.5 text-muted",
-              )}
-            >
+            <th scope="row" className={cx(cell, "font-medium")}>
               {day}
             </th>
             {FISCAL_MONTHS.map((month, monthIndex) => {
               const key = fiscalCellKey(fiscalYearStart, monthIndex, day);
-              const cell = key ? summary.byDate.get(key) : undefined;
-              const value = cell?.hours ? cell.hours : (cell?.code ?? "");
+              const value = key ? summary.byDate.get(key) : undefined;
 
               return (
                 <td
                   key={month.label}
-                  className={cx(
-                    cellBorder,
-                    print ? "p-0.5" : "p-1.5",
-                    // Days the month doesn't have are struck out, not left blank.
-                    !key && (print ? "bg-neutral-200" : "bg-surface-2/60"),
-                    Boolean(!print && cell?.hours) && "bg-brand-soft font-semibold text-brand",
-                    Boolean(!print && cell?.code) && "font-medium text-accent",
-                  )}
-                  title={
-                    cell
-                      ? `${month.label} ${day}: ${cell.hours ? `${cell.hours} h` : cell.code}${
-                          cell.lessonCount > 1 ? ` (${cell.lessonCount} events)` : ""
-                        }`
-                      : undefined
-                  }
+                  // Days the month doesn't have are shaded, not left ambiguously blank.
+                  className={cx(cell, !key && "bg-neutral-200")}
                 >
-                  {value}
+                  {value?.hours ? value.hours : (value?.code ?? "")}
                 </td>
               );
             })}
@@ -105,27 +72,11 @@ export function AttendanceGrid({
         ))}
 
         <tr>
-          <th
-            scope="row"
-            className={cx(
-              cellBorder,
-              headBg,
-              "font-bold",
-              print ? "p-0.5 text-[6pt]" : "p-1.5 text-[10px] uppercase text-muted",
-            )}
-          >
+          <th scope="row" className={cx(cell, "text-[6pt] font-bold")}>
             Total
           </th>
           {summary.monthTotals.map((total, index) => (
-            <td
-              key={FISCAL_MONTHS[index].label}
-              className={cx(
-                cellBorder,
-                headBg,
-                "font-bold",
-                print ? "p-0.5" : "p-1.5 text-ink",
-              )}
-            >
+            <td key={FISCAL_MONTHS[index].label} className={cx(cell, "font-bold")}>
               {total || ""}
             </td>
           ))}

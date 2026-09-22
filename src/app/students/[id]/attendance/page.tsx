@@ -5,12 +5,13 @@ import {
   calendarYearForFiscalMonth,
   fiscalYearLabel,
   formatDateInput,
+  formatMonthParam,
+  parseMonthParam,
   summarizeAttendance,
   todayUTC,
 } from "@/lib/fiscal-year";
 import type { LessonStatus } from "@/lib/constants";
-import { AttendanceGrid } from "@/components/attendance-grid";
-import { ButtonLink } from "@/components/ui";
+import { AttendanceCalendar } from "@/components/attendance-calendar";
 import { LessonList } from "@/components/lesson-list";
 import { LogLessonPanel } from "@/components/log-lesson-panel";
 import { ViewToggle } from "@/components/view-toggle";
@@ -29,9 +30,19 @@ export default async function AttendancePage({
     orderBy: [{ date: "desc" }, { createdAt: "desc" }],
   });
 
-  const view = query.view === "grid" ? "grid" : "list";
+  const view = query.view === "calendar" ? "calendar" : "list";
 
+  // Default the calendar to the month of the most recent event, falling back to today,
+  // so opening a student mid-year doesn't land on an empty month.
   const today = todayUTC();
+  const anchor = lessons[0]?.date ?? today;
+  const requested = parseMonthParam(
+    typeof query.month === "string" ? query.month : undefined,
+  );
+  const { year, month } = requested ?? {
+    year: anchor.getUTCFullYear(),
+    month: anchor.getUTCMonth(),
+  };
 
   const summary = summarizeAttendance(
     lessons.map((l) => ({
@@ -60,6 +71,7 @@ export default async function AttendancePage({
   const lastSlot = lessons.find((l) => l.startTime && l.endTime);
 
   const basePath = `/students/${student.id}/attendance`;
+  const monthParam = formatMonthParam(year, month);
 
   const thisMonthHours = summary.monthTotals[
     FISCAL_MONTHS.findIndex((m) => m.month === today.getUTCMonth())
@@ -82,7 +94,7 @@ export default async function AttendancePage({
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <ViewToggle basePath={basePath} view={view} />
+        <ViewToggle basePath={basePath} view={view} monthParam={monthParam} />
         {readOnly ? null : (
           <LogLessonPanel
             studentId={student.id}
@@ -105,24 +117,18 @@ export default async function AttendancePage({
         </p>
       ) : null}
 
-      {view === "grid" ? (
-        <Card>
-          <CardHeader
-            title={`Attendance grid · ${fiscalYearLabel(student.fiscalYearStart)}`}
-            description="Hours by day and month, exactly as the paper form lays it out."
-            action={
-              <ButtonLink href={`/students/${student.id}/print`} variant="secondary">
-                Print form
-              </ButtonLink>
-            }
-          />
-          <div className="overflow-x-auto p-5">
-            <AttendanceGrid
-              summary={summary}
-              fiscalYearStart={student.fiscalYearStart}
-            />
-          </div>
-        </Card>
+      {view === "calendar" ? (
+        <AttendanceCalendar
+          studentId={student.id}
+          lessons={drafts}
+          year={year}
+          month={month}
+          fiscalYearStart={student.fiscalYearStart}
+          readOnly={readOnly}
+          basePath={basePath}
+          defaultStartTime={lastSlot?.startTime ?? null}
+          defaultEndTime={lastSlot?.endTime ?? null}
+        />
       ) : (
         <Card>
           <CardHeader
@@ -138,9 +144,7 @@ export default async function AttendancePage({
         </Card>
       )}
 
-      {view === "grid" ? null : (
-        <MonthlyTotals summary={summary} fiscalYearStart={student.fiscalYearStart} />
-      )}
+      <MonthlyTotals summary={summary} fiscalYearStart={student.fiscalYearStart} />
     </div>
   );
 }

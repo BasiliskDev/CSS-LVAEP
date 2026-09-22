@@ -48,7 +48,7 @@ Tutors sign themselves up at `/register`.
 | `/onboarding` | Tutor name, phone, site, usual days/times — the form's header block. Doubles as the profile editor afterwards. |
 | `/dashboard` | The tutor's students, split Active / Stopped, with hours this month and this year. |
 | `/students/[id]` | **Overview** — student details and the STOPPED box (reason required). |
-| `…/attendance` | Every tutoring event, as a **list** or the **grid**, plus the Jul–Jun monthly totals. |
+| `…/attendance` | Every tutoring event, as a **list** or a **calendar**, plus the Jul–Jun monthly totals. |
 | `…/print` | The filled paper form for one student, ready to print. |
 | `/print` | Every student's form, one page each, printed in a single run. |
 | `…/achievements` | The 17-item checklist plus custom goals. |
@@ -62,12 +62,17 @@ Every tutoring event is added by hand and stored as its own row. Nothing is infe
 
 - **List** (default) — newest first, grouped by month with an hours subtotal and an
   event count per month. Edit or delete any event inline.
-- **Grid** — the paper form's own layout: 31 day-rows by 12 month-columns, Jul through
-  Jun, with a total per month. Read-only by construction, since it is derived from the
-  events, so its totals cannot disagree with the log. Days a month doesn't have (Feb 30,
-  Jun 31) are greyed rather than left blank.
+- **Calendar** — a month laid out by real weekdays, but filled in like the paper grid:
+  each day shows only the hours tutored that day, or the absence code. Clicking a day
+  opens it — its events, with edit, and a form prefilled with that date. Arrows page
+  between months and `Today` jumps back.
 
-The view lives in the URL (`?view=grid`), so either is linkable.
+The view and month live in the URL (`?view=calendar&month=2026-09`), so either is
+linkable.
+
+The form's 31 x 12 grid was tried on screen and dropped: mapping a row and column back
+to a real date is work the calendar does for you. It survives where it is actually
+required — the printed form, below.
 
 ### Printing
 
@@ -78,7 +83,7 @@ Two buttons produce the original paper form, filled in:
   by default, with a link to include stopped ones
 
 Both render the same [`PrintableForm`](src/components/printable-form.tsx): a landscape
-sheet with the attendance grid on the left and the achievements checklist on the right,
+sheet with the form's own 31 x 12 attendance grid on the left and the achievements checklist on the right,
 ticks on attained goals, the STOPPED box, and the tutoring site / day(s) / time(s) strip
 — plain black rules on white so it photocopies like the original. The on-screen toolbar
 carries `no-print`, so only the sheet itself reaches the paper.
