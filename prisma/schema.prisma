@@ -29,9 +29,16 @@ model User {
   defaultTimes String?
   onboardedAt  DateTime?
 
-  site     Site?     @relation(fields: [siteId], references: [id], onDelete: SetNull)
-  sessions Session[]
-  students Student[]
+  /// Where an invite was sent. Nullable because the seeded office account predates
+  /// invites; unique so two accounts can never claim the same address (Postgres treats
+  /// NULLs as distinct, so any number of accounts may have none).
+  email String? @unique
+
+  site              Site?              @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  sessions          Session[]
+  students          Student[]
+  invitesSent       Invite[]
+  scheduledSessions ScheduledSession[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -58,16 +65,22 @@ model Site {
   name    String  @unique
   address String?
 
-  users    User[]
-  students Student[]
+  users             User[]
+  students          Student[]
+  invites           Invite[]
+  scheduledSessions ScheduledSession[]
 
   createdAt DateTime @default(now())
 }
 
 /// The "container" a tutor works in: one student, one fiscal year.
 model Student {
-  id        String @id @default(cuid())
-  tutorId   String
+  id String @id @default(cuid())
+
+  /// Null while the student sits in the office's unassigned pool — either a tutor handed
+  /// them back, or their tutor's account was deleted. The record and every lesson,
+  /// achievement and report survive, so the office can reassign without losing a thing.
+  tutorId   String?
   firstName String
   lastName  String
 
@@ -84,11 +97,23 @@ model Student {
 
   notes String?
 
-  tutor        User                 @relation(fields: [tutorId], references: [id], onDelete: Cascade)
-  site         Site?                @relation(fields: [siteId], references: [id], onDelete: SetNull)
-  lessons      Lesson[]
-  achievements StudentAchievement[]
-  reports      Report[]
+  /// Set when a tutor removes the student from their caseload. Irreversible for them;
+  /// only the office can reassign.
+  removedAt     DateTime?
+  removedReason String?
+  /// Deliberately FK-free: the office only ever reads these back as display text, and a
+  /// second relation to User would force naming the `tutor` relation on both sides.
+  removedById   String?
+  removedByName String?
+
+  /// SetNull, not Cascade: deleting a tutor must park their students in the office pool,
+  /// never destroy a year of logged hours.
+  tutor             User?                     @relation(fields: [tutorId], references: [id], onDelete: SetNull)
+  site              Site?                     @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  lessons           Lesson[]
+  achievements      StudentAchievement[]
+  reports           Report[]
+  scheduledSessions ScheduledSessionStudent[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -118,12 +143,23 @@ model Lesson {
   homeworkCompleted Boolean @default(false)
   notes             String?
 
-  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  /// The series this event was logged from, when it came through the session form.
+  /// Null for anything logged by hand, which is every row that predates scheduling.
+  scheduledSessionId String?
+
+  student          Student           @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  /// SetNull: deleting a series must never delete logged hours.
+  scheduledSession ScheduledSession? @relation(fields: [scheduledSessionId], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  /// One event per student per occurrence, so re-submitting the session form updates
+  /// instead of duplicating. Postgres treats NULLs as distinct, so this binds only rows
+  /// that came from a series — hand-logged events on the same day stay legal.
+  @@unique([scheduledSessionId, studentId, date])
   @@index([studentId, date])
+  @@index([scheduledSessionId, date])
 }
 
 /// Checklist state for one goal. Labels for A1-D4 come from the static catalog in
@@ -160,4 +196,106 @@ model Report {
   updatedAt DateTime @updatedAt
 
   @@index([studentId])
+}
+
+/// An invitation to create an account. Accounts are created only this way.
+model Invite {
+  id    String @id @default(cuid())
+  email String
+
+  /// Opaque, 32 random bytes hex — the same construction as Session.token, and stored
+  /// raw for the same reason the link has to keep working: the office needs to be able
+  /// to re-copy it days later when the email didn't arrive.
+  token       String  @unique
+  displayName String
+  role        String  @default("TUTOR") // TUTOR | ADMIN
+  siteId      String?
+
+  invitedById String
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  revokedAt   DateTime?
+
+  /// Delivery is best-effort — without a verified sender domain it often won't reach an
+  /// external inbox at all — so the outcome is recorded and the office falls back to the
+  /// copyable link. A failed send must never lose the invite.
+  emailSentAt DateTime?
+  emailError  String?
+
+  invitedBy User  @relation(fields: [invitedById], references: [id], onDelete: Cascade)
+  site      Site? @relation(fields: [siteId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([email])
+  @@index([invitedById])
+}
+
+/// A recurring weekly tutoring session, scheduled by the office: one tutor, one weekday,
+/// one time slot, one date range, a set of students.
+///
+/// Occurrences are computed from this rule by src/lib/recurrence.ts and never stored.
+/// Materialising them would make every edit to the series a reconciliation problem, and
+/// an occurrence's identity is already derivable from (id, date).
+model ScheduledSession {
+  id      String  @id @default(cuid())
+  tutorId String
+  siteId  String?
+  title   String?
+
+  /// 0 = Sunday … 6 = Saturday, matching Date#getUTCDay() and WEEKDAY_LABELS.
+  weekday   Int
+  /// The club's wall clock as "HH:MM", exactly like Lesson.startTime/endTime.
+  startTime String
+  endTime   String
+  /// Both UTC midnight, both inclusive.
+  startsOn  DateTime
+  endsOn    DateTime
+
+  status String  @default("ACTIVE") // ACTIVE | ARCHIVED
+  notes  String?
+
+  tutor    User                      @relation(fields: [tutorId], references: [id], onDelete: Cascade)
+  site     Site?                     @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  students ScheduledSessionStudent[]
+  skips    ScheduledSessionSkip[]
+  lessons  Lesson[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tutorId, status])
+  @@index([status, startsOn, endsOn])
+}
+
+/// Which students the tutor is responsible for in a given session.
+model ScheduledSessionStudent {
+  id                 String @id @default(cuid())
+  scheduledSessionId String
+  studentId          String
+
+  scheduledSession ScheduledSession @relation(fields: [scheduledSessionId], references: [id], onDelete: Cascade)
+  student          Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([scheduledSessionId, studentId])
+  @@index([studentId])
+}
+
+/// One cancelled occurrence — a holiday, a closure. The series itself survives.
+model ScheduledSessionSkip {
+  id                 String @id @default(cuid())
+  scheduledSessionId String
+
+  /// UTC midnight of the cancelled occurrence.
+  date   DateTime
+  reason String?
+
+  scheduledSession ScheduledSession @relation(fields: [scheduledSessionId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([scheduledSessionId, date])
 }

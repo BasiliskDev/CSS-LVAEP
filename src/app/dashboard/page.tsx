@@ -8,6 +8,7 @@ import { fiscalYearLabel } from "@/lib/fiscal-year";
 import { DEFAULT_FISCAL_YEAR } from "@/lib/students";
 import { StudentCard } from "@/components/student-card";
 import { ButtonLink, Card, EmptyState, StatTile } from "@/components/ui";
+import { PendingSessionsBanner } from "@/components/pending-sessions-banner";
 
 export const metadata = { title: "Students — TutorLog" };
 
@@ -37,15 +38,16 @@ export default async function DashboardPage() {
             One record per student, as the paper form required.
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          {students.length > 0 ? (
+        {students.length > 0 ? (
+          <div className="flex flex-wrap gap-2">
             <ButtonLink href="/print" variant="secondary">
               Print all forms
             </ButtonLink>
-          ) : null}
-          <ButtonLink href="/students/new">Add student</ButtonLink>
-        </div>
+          </div>
+        ) : null}
       </div>
+
+      <PendingSessionsBanner tutorId={user.id} />
 
       <div className="mb-8 grid gap-3 sm:grid-cols-3">
         <StatTile label="Active students" value={active.length} />
@@ -65,8 +67,7 @@ export default async function DashboardPage() {
         <Card>
           <EmptyState
             title="No students yet"
-            description="Add your first student to start logging lessons and tracking achievements."
-            action={<ButtonLink href="/students/new">Add student</ButtonLink>}
+            description="The office assigns students to you. Once one appears here, you can log lessons and track achievements."
           />
         </Card>
       ) : (

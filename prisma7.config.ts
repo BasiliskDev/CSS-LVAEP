@@ -10,10 +10,18 @@ export default defineConfig({
     seed: "npx tsx prisma/seed.ts",
   },
   datasource: {
-    // Migrations run DDL, which is unreliable through a transaction-mode pooler
-    // (PgBouncer / the Neon pooler). Hosts that give you a pooled URL also give you
-    // a direct one — put that in DIRECT_URL and the CLI will prefer it, while the
-    // app keeps using the pooled DATABASE_URL at runtime.
-    url: process.env["DIRECT_URL"] ?? process.env["DATABASE_URL"],
+    /**
+     * Migrations run DDL and take an advisory lock, neither of which survives a
+     * transaction-mode pooler — so the CLI needs a direct connection while the app
+     * keeps using the pooled DATABASE_URL at runtime.
+     *
+     * Neon's Vercel integration already injects DATABASE_URL_UNPOOLED, so this
+     * normally resolves itself and there is nothing to configure. DIRECT_URL is only
+     * here for a host that names it something else.
+     */
+    url:
+      process.env["DIRECT_URL"] ??
+      process.env["DATABASE_URL_UNPOOLED"] ??
+      process.env["DATABASE_URL"],
   },
 });

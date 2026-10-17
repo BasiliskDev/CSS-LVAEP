@@ -26,6 +26,7 @@ export const config = {
   matcher: [
     "/dashboard/:path*",
     "/students/:path*",
+    "/sessions/:path*",
     "/calendar/:path*",
     "/print/:path*",
     "/admin/:path*",

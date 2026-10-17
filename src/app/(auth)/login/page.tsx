@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { getCurrentUser } from "@/lib/auth";
@@ -14,10 +13,7 @@ export default async function LoginPage() {
     <>
       <LoginForm />
       <p className="mt-4 text-center text-sm text-muted">
-        New tutor?{" "}
-        <Link href="/register" className="font-medium text-brand hover:underline">
-          Create an account
-        </Link>
+        Accounts are created by the office — ask them for an invite link.
       </p>
     </>
   );

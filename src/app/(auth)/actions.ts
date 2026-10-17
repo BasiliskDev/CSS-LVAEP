@@ -6,64 +6,15 @@ import {
   createSession,
   destroySession,
   getCurrentUser,
-  hashPassword,
   pruneExpiredSessions,
   verifyPassword,
 } from "@/lib/auth";
+import { fieldErrorsOf, type FormState } from "@/lib/action-state";
 import { prisma } from "@/lib/db";
-import { loginSchema, registerSchema } from "@/lib/validation";
+import { loginSchema } from "@/lib/validation";
 
-export type AuthFormState = {
-  error?: string;
-  fieldErrors?: Record<string, string>;
-};
-
-function fieldErrorsOf(error: { issues: Array<{ path: PropertyKey[]; message: string }> }) {
-  const fieldErrors: Record<string, string> = {};
-  for (const issue of error.issues) {
-    const key = String(issue.path[0] ?? "form");
-    fieldErrors[key] ??= issue.message;
-  }
-  return fieldErrors;
-}
-
-export async function registerAction(
-  _prev: AuthFormState,
-  formData: FormData,
-): Promise<AuthFormState> {
-  const parsed = registerSchema.safeParse({
-    username: formData.get("username"),
-    displayName: formData.get("displayName"),
-    password: formData.get("password"),
-    confirmPassword: formData.get("confirmPassword"),
-  });
-
-  if (!parsed.success) {
-    return { fieldErrors: fieldErrorsOf(parsed.error) };
-  }
-
-  const { username, displayName, password } = parsed.data;
-
-  const existing = await prisma.user.findUnique({
-    where: { username },
-    select: { id: true },
-  });
-  if (existing) {
-    return { fieldErrors: { username: "That username is taken" } };
-  }
-
-  const user = await prisma.user.create({
-    data: {
-      username,
-      displayName,
-      passwordHash: await hashPassword(password),
-    },
-    select: { id: true },
-  });
-
-  await createSession(user.id);
-  redirect("/onboarding");
-}
+/** These forms redirect on success, so they carry no `ok`. */
+export type AuthFormState = FormState;
 
 export async function loginAction(
   _prev: AuthFormState,

@@ -38,23 +38,111 @@ The seed creates:
 - an office account — username `admin`, password `changeme123`
   (override with `SEED_ADMIN_USERNAME` / `SEED_ADMIN_PASSWORD`)
 
-Tutors sign themselves up at `/register`.
+**Nobody signs themselves up.** The office account creates every other account from
+`/admin/invites`, which produces an invite link the tutor opens to choose their own
+username and password. The link is always shown on screen and can be copied by hand,
+so invites work whether or not email is configured (see **Email** below).
+
+Because self-registration is closed and the app has no password reset, the seeded office
+account is the way back in. If its password is lost:
+
+```bash
+SEED_ADMIN_RESET=1 SEED_ADMIN_PASSWORD='a-new-password' npx prisma db seed
+```
+
+Without `SEED_ADMIN_RESET=1` the seed leaves an existing account untouched, so a routine
+deploy can never quietly reset a password.
+
+### Email
+
+Invite emails go through a Vercel Marketplace integration:
+
+```bash
+vercel integration add resend/resend-email   # accept the provider terms in the browser
+vercel env pull                              # brings down RESEND_API_KEY
+```
+
+That key is the only thing required. Mail goes out through Resend's shared sender until
+you verify a domain of your own and set `EMAIL_FROM`; the shared sender reliably reaches
+the account owner and little else, so **the copyable invite link is the real path** until
+a domain is verified. `/admin/invites` says so plainly when the key is missing.
+
+A send that fails is recorded on the invite (`emailError`) and never loses it. All the
+provider-specific code is in [`src/lib/email.ts`](src/lib/email.ts).
+
+> `vercel env pull` writes `.env.local`, which Next loads at **higher precedence than
+> `.env`**. If the pull brings down a hosted `DATABASE_URL`, it will silently override
+> your local one — check the diff before running anything that writes to the database.
 
 ## How it works
 
 | Screen | What it does |
 |---|---|
-| `/register`, `/login` | Username + password. Tutors self-register. |
+| `/login` | Username + password. There is no sign-up form — accounts come from invites. |
+| `/invite/[token]` | Public. Where an invited tutor chooses their username and password. |
 | `/onboarding` | Tutor name, phone, site, usual days/times — the form's header block. Doubles as the profile editor afterwards. |
 | `/dashboard` | The tutor's students, split Active / Stopped, with hours this month and this year. |
-| `/students/[id]` | **Overview** — student details and the STOPPED box (reason required). |
+| `/students/[id]` | **Overview** — student details, the STOPPED box (reason required), and removal. |
 | `…/attendance` | Every tutoring event, as a **list** or a **calendar**, plus the Jul–Jun monthly totals. |
 | `…/print` | The filled paper form for one student, ready to print. |
 | `/print` | Every student's form, one page each, printed in a single run. |
 | `…/achievements` | The 17-item checklist plus custom goals. |
 | `…/reports` | Written progress reports. |
 | `/calendar` | **Global calendar** — every event across all your students in one month view. |
-| `/admin` | Office view: every tutor and student, read-only. Requires an `ADMIN` account. |
+| `/admin` | **Office.** Every tutor and student, plus the pool of unassigned students waiting to be given to a tutor. Requires an `ADMIN` account. |
+| `/admin/invites` | Create, resend and revoke invites. Each open invite shows its copyable link. |
+| `/admin/students/new` | Create a student and assign them to a tutor. Only the office can do this. |
+| `/admin/sessions` | Weekly sessions: a tutor, a weekday, a time slot, a date range and a set of students. |
+| `/admin/sessions/[id]` | Edit a session, change who is in it, and cancel individual dates. |
+| `/sessions/[id]/[date]` | One occurrence, every student, one submit — where a tutor logs a scheduled session. |
+
+### Who can do what
+
+The club runs top-down, and the app matches that.
+
+**The office (`ADMIN`)** creates accounts, creates students, decides who tutors whom, and
+schedules sessions. It can read every student's record but deliberately cannot *write* to
+one — `requireStudent` returns `readOnly` for anyone who is not that student's tutor, so
+the office changes assignments through its own actions rather than by editing a tutor's
+sheet behind their back.
+
+**A tutor** logs hours, ticks achievements and writes reports for their own students, and
+nothing else. They cannot create a student, and they cannot create or edit a session.
+
+A tutor *can* hand a student back, from the student's Overview tab. It takes two
+deliberate steps — opening the panel, then typing the student's full name — because they
+cannot undo it themselves. **Nothing is deleted:** every hour, goal, report and note is
+kept, `Student.tutorId` becomes null, and the student appears in the office's
+"Unassigned students" list, where an admin can assign them to anyone. Reassignment writes
+one column, so the whole history comes along untouched.
+
+### Scheduled sessions and the hours reminder
+
+A session is a weekly rule — *Tutor Tony, Thursdays 5:30–6:30 PM, Sep 1 to Jan 19,
+students Nicky and Bonito* — not a pile of rows. Occurrences are computed from the rule by
+`src/lib/recurrence.ts` and never stored, so editing the series is never a reconciliation
+problem. A single date can be cancelled (a holiday, a closure) without touching the rest,
+optionally stamping the paper form's own `H` on each student's sheet.
+
+Occurrences show on `/calendar` as dashed outlines until their hours are logged, so a
+glance distinguishes what was *meant* to happen from what did.
+
+When a session's slot has passed and no hours were logged, the tutor's dashboard shows a
+**"Sessions awaiting hours"** banner linking to a form that logs an event for every
+student in that session at once. The slot comes from the series row rather than the form,
+so hours stay derived and unforgeable; re-submitting updates the same events instead of
+duplicating them.
+
+This reminder is in-app only — no push notifications, no service worker, no cron, no extra
+dependency. The trade is honest: it only reaches a tutor who opens the app. In exchange it
+can never fire twice, go stale, be denied permission, or fail silently.
+
+> **Time zones matter here.** Slots are wall-clock `"HH:MM"` strings and dates are stored
+> as UTC midnight. Deciding "has this 5:30 PM session finished?" by treating the slot as
+> UTC would fire the reminder four or five hours early in New Jersey. `src/lib/club-time.ts`
+> compares in wall-clock space instead, which also makes daylight saving a non-event. It
+> is the only module that knows about a time zone, and `todayUTC()` now routes through it —
+> so an evening lesson no longer defaults to tomorrow's date.
 
 ### Attendance: two views over one log
 
@@ -95,8 +183,13 @@ per-student page cannot: *what does my week actually look like?* It shows every 
 labelled with the student, plus a per-student hours breakdown for that month. Clicking an
 event opens that student's own calendar on the same month.
 
-It is a read-only overview: there is no add button, because "which student?" has no answer
-on a shared day. Logging happens on a student's page.
+Scheduled sessions appear alongside, as dashed outlines, until their hours are logged —
+so the same month view shows both what happened and what still owes hours. Clicking one
+opens the session form for that date.
+
+There is still no "add event" button here, because "which student?" has no answer on a
+shared day. Ad-hoc logging happens on a student's page; scheduled logging happens through
+the session chip.
 
 Signed in as an `ADMIN`, the same page widens to every tutor's events and names the tutor
 on each chip — the office's version of the same question.
@@ -153,9 +246,18 @@ The auth here is deliberately minimal, sized for a club prototype:
   [`src/lib/guards.ts`](src/lib/guards.ts); a student that isn't yours returns 404, so a
   URL can't confirm that someone else's record exists
 - the office (`ADMIN`) can read any student but writes are rejected server-side
+- accounts exist only by invitation; there is no public sign-up form
+- **invite tokens are stored unhashed.** That is a deliberate trade: the requirement is a
+  link the office can re-copy days later, which a hash would make impossible. The exposure
+  is bounded by a 7-day expiry, single use, and the fact that accepting an invite closes it
+- hours are always *derived* from a time slot and never read from the request, on both the
+  single-lesson and the whole-session forms, so a hand-crafted POST cannot inflate a total
+- a date arriving in a URL (`/sessions/[id]/[date]`) is checked against the series rule
+  before anything is written
 
-**Not implemented:** password reset, email verification, login rate limiting, CSRF
-tokens beyond the SameSite cookie, session rotation, and audit logging. `src/proxy.ts`
+**Not implemented:** password reset in the app (see the seed escape hatch under **Setup**),
+email verification, login rate limiting, CSRF tokens beyond the SameSite cookie, session
+rotation, and audit logging. `src/proxy.ts`
 only checks that a session cookie is *present* — it can't reach the database, so it is a
 redirect convenience, not the security boundary.
 
@@ -169,6 +271,19 @@ npx vitest run         # unit tests
 npx prisma studio      # browse the database
 ```
 
+Migrations need a direct (unpooled) connection — DDL and advisory locks don't survive a
+transaction-mode pooler. Hosted, that resolves itself. Against a local Postgres without
+TLS you'll need `?sslmode=disable`:
+
+```bash
+DIRECT_URL='postgresql://postgres:postgres@127.0.0.1:5432/tutorlog?sslmode=disable' \
+  npx prisma migrate deploy
+```
+
+The date logic is timezone-sensitive, and a machine already in US Eastern time hides
+exactly the bugs worth catching. Run the dev server as `TZ=UTC npm run dev` when testing
+anything involving the reminder or a lesson's default date — Vercel's runtime is UTC.
+
 ## Deploying to Vercel
 
 The app is a standard Next.js server app with one external dependency: Postgres.
@@ -176,9 +291,11 @@ The app is a standard Next.js server app with one external dependency: Postgres.
 1. **Provision Postgres** — Vercel Postgres, Neon, Supabase, Railway; any of them work,
    since the code targets plain `postgresql` through `@prisma/adapter-pg`.
 2. **Set environment variables** in the Vercel project: `DATABASE_URL` (the **pooled**
-   connection string), `DIRECT_URL` (the unpooled one, used only by the Prisma CLI for
-   migrations — DDL through a transaction-mode pooler is unreliable), and optionally
-   `SEED_ADMIN_USERNAME` / `SEED_ADMIN_PASSWORD`.
+   connection string) and optionally `SEED_ADMIN_USERNAME` / `SEED_ADMIN_PASSWORD` /
+   `SEED_ADMIN_EMAIL`, plus `RESEND_API_KEY` for invite emails.
+   Migrations need an unpooled connection, but Neon's integration already injects
+   `DATABASE_URL_UNPOOLED` and the Prisma config picks it up, so there is nothing extra
+   to set. Override with `DIRECT_URL` only if your host names it differently.
 3. **Set the build command** to `npm run vercel-build`, which runs
    `prisma generate && prisma migrate deploy && next build`. Both steps matter:
    the generated Prisma client is gitignored, so a build without `prisma generate`

@@ -1,11 +1,25 @@
 import { describe, expect, it } from "vitest";
 
+import { fieldErrorsOf } from "./action-state";
 import {
+  acceptInviteSchema,
+  adminStudentSchema,
+  inviteSchema,
   lessonSchema,
   onboardingSchema,
+  removeStudentSchema,
   reportSchema,
+  scheduledSessionSchema,
   studentSchema,
 } from "./validation";
+
+/**
+ * Field errors the way an action would report them, so these assertions exercise the
+ * same reducer the forms render through rather than poking at raw Zod issues.
+ */
+function fieldErrors(parsed: { success: boolean; error?: { issues: Array<{ path: PropertyKey[]; message: string }> } }) {
+  return parsed.error ? fieldErrorsOf(parsed.error) : {};
+}
 
 /**
  * Regression guard for a bug that silently broke every form:
@@ -185,5 +199,143 @@ describe("lesson rules mirror the paper form", () => {
       endTime: "19:00",
     });
     expect(result.success).toBe(false);
+  });
+});
+
+describe("invites", () => {
+  it("normalises a padded, mixed-case address", () => {
+    const parsed = inviteSchema.safeParse({
+      email: "  Nicky.Smith@School.ORG ",
+      displayName: "Nicky Smith",
+      role: "TUTOR",
+      siteId: null,
+    });
+    expect(parsed.success).toBe(true);
+    // Stored lowercase, so a duplicate can't slip in on case alone.
+    expect(parsed.success && parsed.data.email).toBe("nicky.smith@school.org");
+  });
+
+  it("rejects something that isn't an address", () => {
+    const parsed = inviteSchema.safeParse({
+      email: "nicky at school",
+      displayName: "Nicky",
+      role: "TUTOR",
+      siteId: null,
+    });
+    expect(parsed.success).toBe(false);
+    expect(fieldErrors(parsed)).toEqual({ email: "Enter a valid email address" });
+  });
+
+  it("rejects a role that isn't one of ours", () => {
+    const parsed = inviteSchema.safeParse({
+      email: "a@b.com",
+      displayName: "A",
+      role: "SUPERUSER",
+      siteId: null,
+    });
+    expect(parsed.success).toBe(false);
+  });
+
+  it("points a password mismatch at the confirm field", () => {
+    const parsed = acceptInviteSchema.safeParse({
+      username: "nicky",
+      displayName: "Nicky Smith",
+      password: "correct-horse",
+      confirmPassword: "correct-hoarse",
+    });
+    expect(parsed.success).toBe(false);
+    expect(fieldErrors(parsed)).toEqual({ confirmPassword: "Passwords do not match" });
+  });
+});
+
+describe("office-managed students", () => {
+  it("requires a tutor", () => {
+    const parsed = adminStudentSchema.safeParse({
+      firstName: "Nicky",
+      lastName: "Smith",
+      tutorId: "",
+      fiscalYearStart: 2026,
+      siteId: null,
+      days: null,
+      times: null,
+      notes: null,
+    });
+    expect(parsed.success).toBe(false);
+    expect(fieldErrors(parsed)).toEqual({ tutorId: "Choose a tutor" });
+  });
+
+  it("requires the student's name to be typed before removal", () => {
+    expect(removeStudentSchema.safeParse({ confirmName: "", removedReason: null }).success).toBe(
+      false,
+    );
+    // The reason is optional — the typed name is what makes it deliberate.
+    expect(
+      removeStudentSchema.safeParse({ confirmName: "Nicky Smith", removedReason: null }).success,
+    ).toBe(true);
+  });
+});
+
+describe("scheduled sessions", () => {
+  const base = {
+    tutorId: "t1",
+    title: null,
+    weekday: 2,
+    startTime: "17:30",
+    endTime: "18:30",
+    startsOn: "2026-09-01",
+    endsOn: "2027-01-19",
+    siteId: null,
+    notes: null,
+    studentIds: ["s1", "s2"],
+  };
+
+  it("accepts a whole term and derives the slot length", () => {
+    const parsed = scheduledSessionSchema.safeParse(base);
+    expect(parsed.success).toBe(true);
+    expect(parsed.success && parsed.data.hours).toBe(1);
+  });
+
+  it("accepts the nulls formData.get() actually delivers for optional fields", () => {
+    // The .nullish() regression guard: title and notes are absent from the DOM when blank.
+    const parsed = scheduledSessionSchema.safeParse({ ...base, title: null, notes: null });
+    expect(parsed.success).toBe(true);
+    expect(parsed.success && parsed.data.title).toBeNull();
+  });
+
+  it("rejects a backwards slot", () => {
+    const parsed = scheduledSessionSchema.safeParse({ ...base, startTime: "18:30", endTime: "17:30" });
+    expect(parsed.success).toBe(false);
+    expect(fieldErrors(parsed)).toEqual({ endTime: "The end time must be after the start time" });
+  });
+
+  it("rejects a zero-length slot", () => {
+    const parsed = scheduledSessionSchema.safeParse({ ...base, startTime: "17:30", endTime: "17:30" });
+    expect(parsed.success).toBe(false);
+  });
+
+  it("rejects a last date before the first", () => {
+    const parsed = scheduledSessionSchema.safeParse({
+      ...base,
+      startsOn: "2027-01-19",
+      endsOn: "2026-09-01",
+    });
+    expect(parsed.success).toBe(false);
+    expect(fieldErrors(parsed)).toEqual({ endsOn: "The last date is before the first one" });
+  });
+
+  it("rejects a mistyped year rather than scheduling for decades", () => {
+    const parsed = scheduledSessionSchema.safeParse({ ...base, endsOn: "2029-01-19" });
+    expect(parsed.success).toBe(false);
+    expect(Object.keys(fieldErrors(parsed))).toEqual(["endsOn"]);
+  });
+
+  it("needs at least one student", () => {
+    const parsed = scheduledSessionSchema.safeParse({ ...base, studentIds: [] });
+    expect(parsed.success).toBe(false);
+    expect(fieldErrors(parsed)).toEqual({ studentIds: "Pick at least one student" });
+  });
+
+  it("rejects a weekday outside the week", () => {
+    expect(scheduledSessionSchema.safeParse({ ...base, weekday: 7 }).success).toBe(false);
   });
 });

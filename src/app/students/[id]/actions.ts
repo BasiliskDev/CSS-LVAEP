@@ -1,7 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 
+import { fieldErrorsOf, type ActionState } from "@/lib/action-state";
 import { prisma } from "@/lib/db";
 import { requireStudent } from "@/lib/guards";
 import { nextCustomCode } from "@/lib/achievements";
@@ -9,28 +11,16 @@ import {
   achievementToggleSchema,
   customAchievementSchema,
   lessonSchema,
+  removeStudentSchema,
   reportSchema,
   stopStudentSchema,
   studentSchema,
 } from "@/lib/validation";
 import { todayUTC } from "@/lib/fiscal-year";
 
-export type ActionState = {
-  ok?: boolean;
-  error?: string;
-  fieldErrors?: Record<string, string>;
-};
+// Re-exported so the components importing it keep their existing import path.
+export type { ActionState } from "@/lib/action-state";
 
-function fieldErrorsOf(error: {
-  issues: Array<{ path: PropertyKey[]; message: string }>;
-}): Record<string, string> {
-  const fieldErrors: Record<string, string> = {};
-  for (const issue of error.issues) {
-    const key = String(issue.path[0] ?? "form");
-    fieldErrors[key] ??= issue.message;
-  }
-  return fieldErrors;
-}
 
 /**
  * Every action re-checks access through requireStudent, which 404s for a student
@@ -271,4 +261,60 @@ export async function resumeStudentAction(studentId: string) {
     data: { status: "ACTIVE", stoppedAt: null, stoppedReason: null },
   });
   revalidateStudent(studentId);
+}
+
+/**
+ * A tutor hands a student back to the office.
+ *
+ * Nothing is deleted: the student keeps every lesson, achievement, report and note, and
+ * lands in the office's unassigned pool, where only an admin can reassign them. That is
+ * what makes this irreversible *for the tutor* without being destructive — and it is why
+ * Student.tutorId is nullable rather than the row being removed.
+ */
+export async function removeStudentAction(
+  studentId: string,
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const { student, user } = await requireWritableStudent(studentId);
+
+  const parsed = removeStudentSchema.safeParse({
+    confirmName: formData.get("confirmName"),
+    removedReason: formData.get("removedReason"),
+  });
+  if (!parsed.success) return { fieldErrors: fieldErrorsOf(parsed.error) };
+
+  const expected = `${student.firstName} ${student.lastName}`;
+  const normalise = (value: string) => value.trim().replace(/\s+/g, " ").toLowerCase();
+  if (normalise(parsed.data.confirmName) !== normalise(expected)) {
+    return { fieldErrors: { confirmName: `Type "${expected}" exactly to confirm` } };
+  }
+
+  const [, updated] = await prisma.$transaction([
+    // Drop their scheduled-session memberships, or the series keeps listing a student
+    // this tutor no longer has and the reminder keeps chasing them for it.
+    prisma.scheduledSessionStudent.deleteMany({ where: { studentId } }),
+    prisma.student.updateMany({
+      // Scoped by tutorId so a forged id can't unassign someone else's student.
+      where: { id: studentId, tutorId: user.id },
+      data: {
+        tutorId: null,
+        removedAt: new Date(),
+        removedReason: parsed.data.removedReason,
+        removedById: user.id,
+        removedByName: user.displayName,
+      },
+    }),
+  ]);
+
+  if (updated.count === 0) return { error: "That student is no longer yours." };
+
+  revalidateStudent(studentId);
+  revalidatePath("/admin");
+  revalidatePath("/calendar");
+
+  // Redirect from the server rather than from the client once `ok` comes back: this page
+  // is about to 404 for this tutor, and the revalidation above can unmount the form
+  // before a client-side effect ever runs — leaving them staring at a not-found page.
+  redirect("/dashboard");
 }

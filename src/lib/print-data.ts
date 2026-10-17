@@ -35,7 +35,8 @@ export async function getPrintableStudents(where: { id?: string; tutorId?: strin
       status: student.status,
       stoppedReason: student.stoppedReason,
     },
-    tutorName: student.tutor.displayName,
+    // A student in the office's unassigned pool still has a form worth printing.
+    tutorName: student.tutor?.displayName ?? "Unassigned",
     siteName: student.site?.name ?? null,
     summary: summarizeAttendance(
       student.lessons.map((l) => ({

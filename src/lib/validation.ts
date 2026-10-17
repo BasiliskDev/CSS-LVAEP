@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { lessonStatusSchema } from "./constants";
+import { lessonStatusSchema, userRoleSchema } from "./constants";
 import { parseDateInput } from "./fiscal-year";
 import { hoursBetween, parseTimeInput } from "./time-slot";
 
@@ -53,18 +53,6 @@ export const passwordSchema = z
   .string()
   .min(8, "Password must be at least 8 characters")
   .max(200, "Password must be 200 characters or fewer");
-
-export const registerSchema = z
-  .object({
-    username: usernameSchema,
-    displayName: trimmed(80).min(1, "Enter your name"),
-    password: passwordSchema,
-    confirmPassword: z.string(),
-  })
-  .refine((data) => data.password === data.confirmPassword, {
-    message: "Passwords do not match",
-    path: ["confirmPassword"],
-  });
 
 export const loginSchema = z.object({
   username: z.string().trim().min(1, "Enter your username"),
@@ -182,4 +170,139 @@ export const reportSchema = z.object({
 export const stopStudentSchema = z.object({
   stoppedReason: trimmed(500).min(1, "A reason is required"),
   stoppedAt: optionalDateInput,
+});
+
+// --- Invites ---------------------------------------------------------------------
+
+/**
+ * Zod validates before it transforms, so the trim has to happen in an earlier link of
+ * the chain than the email check — otherwise " A@B.com " is rejected instead of
+ * normalised. Addresses are stored lowercase so a duplicate can't slip in on case.
+ */
+const emailInput = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .pipe(z.email("Enter a valid email address"))
+  .pipe(z.string().max(200, "That email address is too long"));
+
+export const inviteSchema = z.object({
+  email: emailInput,
+  displayName: trimmed(80).min(1, "Enter their name"),
+  role: userRoleSchema,
+  siteId: z.string().trim().nullish(),
+});
+
+/** Same shape the open registration form used; accounts just come through a new door. */
+export const acceptInviteSchema = z
+  .object({
+    username: usernameSchema,
+    displayName: trimmed(80).min(1, "Enter your name"),
+    password: passwordSchema,
+    confirmPassword: z.string(),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: "Passwords do not match",
+    path: ["confirmPassword"],
+  });
+
+// --- Office-managed students -----------------------------------------------------
+
+/** Students are created by the office now, so the tutor is part of the form. */
+export const adminStudentSchema = studentSchema.extend({
+  tutorId: z.string().trim().min(1, "Choose a tutor"),
+});
+
+export const reassignStudentSchema = z.object({
+  tutorId: z.string().trim().min(1, "Choose a tutor"),
+});
+
+/**
+ * Removal can't be undone by the tutor, so the student's name has to be typed out. That
+ * is the second half of the warning — the first is having to open the panel at all.
+ */
+export const removeStudentSchema = z.object({
+  confirmName: trimmed(200).min(1, "Type the student's full name to confirm"),
+  removedReason: optionalText(500),
+});
+
+// --- Scheduled sessions ----------------------------------------------------------
+
+/** Long enough for a school year and a bit; short enough that a typo'd year is caught. */
+const MAX_SERIES_MONTHS = 18;
+
+/**
+ * A recurring session. Mirrors lessonSchema: the cross-field rules live in a transform
+ * so a bad slot or an inverted range reads back as a field error rather than throwing.
+ */
+export const scheduledSessionSchema = z
+  .object({
+    tutorId: z.string().trim().min(1, "Choose a tutor"),
+    title: optionalText(120),
+    weekday: z.coerce.number().int().min(0, "Pick a day").max(6, "Pick a day"),
+    startTime: z.string().trim(),
+    endTime: z.string().trim(),
+    startsOn: dateInput,
+    endsOn: dateInput,
+    siteId: z.string().trim().nullish(),
+    notes: optionalText(2000),
+    studentIds: z.array(z.string().trim().min(1)).min(1, "Pick at least one student"),
+  })
+  .transform((data, ctx) => {
+    if (parseTimeInput(data.startTime) === null) {
+      ctx.addIssue({ code: "custom", message: "Enter a valid time", path: ["startTime"] });
+      return z.NEVER;
+    }
+    if (parseTimeInput(data.endTime) === null) {
+      ctx.addIssue({ code: "custom", message: "Enter a valid time", path: ["endTime"] });
+      return z.NEVER;
+    }
+
+    const hours = hoursBetween(data.startTime, data.endTime);
+    if (hours === null) {
+      ctx.addIssue({
+        code: "custom",
+        message: "The end time must be after the start time",
+        path: ["endTime"],
+      });
+      return z.NEVER;
+    }
+    if (hours > 12) {
+      ctx.addIssue({
+        code: "custom",
+        message: "That slot is longer than 12 hours — check the times",
+        path: ["endTime"],
+      });
+      return z.NEVER;
+    }
+
+    if (data.endsOn < data.startsOn) {
+      ctx.addIssue({
+        code: "custom",
+        message: "The last date is before the first one",
+        path: ["endsOn"],
+      });
+      return z.NEVER;
+    }
+
+    // A mistyped year would otherwise schedule sessions for decades.
+    const months =
+      (data.endsOn.getUTCFullYear() - data.startsOn.getUTCFullYear()) * 12 +
+      (data.endsOn.getUTCMonth() - data.startsOn.getUTCMonth());
+    if (months > MAX_SERIES_MONTHS) {
+      ctx.addIssue({
+        code: "custom",
+        message: `A session can run for at most ${MAX_SERIES_MONTHS} months — check the year`,
+        path: ["endsOn"],
+      });
+      return z.NEVER;
+    }
+
+    return { ...data, hours };
+  });
+
+export const sessionSkipSchema = z.object({
+  date: dateInput,
+  reason: optionalText(200),
+  logHoliday: z.coerce.boolean().default(false),
 });

@@ -113,11 +113,6 @@ export function isCustomCode(code: string): boolean {
   return code.startsWith(CUSTOM_ACHIEVEMENT_PREFIX);
 }
 
-/** Display label for a stored row: catalog label for A1-D4, own label for E rows. */
-export function labelForCode(code: string, storedLabel?: string | null): string {
-  return CATALOG_BY_CODE.get(code)?.label ?? storedLabel ?? code;
-}
-
 /** Next free custom code given the codes a student already has. */
 export function nextCustomCode(existingCodes: string[]): string {
   const used = existingCodes

@@ -48,5 +48,43 @@ export async function requireStudent(studentId: string) {
   if (!student) notFound();
   if (student.tutorId !== user.id && user.role !== "ADMIN") notFound();
 
-  return { student, user, readOnly: student.tutorId !== user.id };
+  // A student in the unassigned pool has no tutorId, so `readOnly` is true for everyone
+  // — which is right: the office reassigns through its own actions, not by editing the
+  // student page, and no tutor should be able to write to a student who isn't theirs.
+  return {
+    student,
+    user,
+    readOnly: student.tutorId !== user.id,
+    unassigned: student.tutorId === null,
+  };
+}
+
+/**
+ * Loads a scheduled session the current user is allowed to see: their own, or any of
+ * them if they are the office. Shaped like requireStudent, including the 404 — the URL
+ * shouldn't confirm that someone else's session exists.
+ */
+export async function requireScheduledSession(scheduledSessionId: string) {
+  const user = await requireUser();
+
+  const series = await prisma.scheduledSession.findUnique({
+    where: { id: scheduledSessionId },
+    include: {
+      site: true,
+      tutor: { select: { id: true, displayName: true, username: true } },
+      students: {
+        include: {
+          student: {
+            select: { id: true, firstName: true, lastName: true, status: true, tutorId: true },
+          },
+        },
+      },
+      skips: { select: { date: true, reason: true } },
+    },
+  });
+
+  if (!series) notFound();
+  if (series.tutorId !== user.id && user.role !== "ADMIN") notFound();
+
+  return { series, user, readOnly: series.tutorId !== user.id };
 }

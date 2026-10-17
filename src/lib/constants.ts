@@ -6,10 +6,6 @@ export const USER_ROLES = ["TUTOR", "ADMIN"] as const;
 export type UserRole = (typeof USER_ROLES)[number];
 export const userRoleSchema = z.enum(USER_ROLES);
 
-export const STUDENT_STATUSES = ["ACTIVE", "STOPPED"] as const;
-export type StudentStatus = (typeof STUDENT_STATUSES)[number];
-export const studentStatusSchema = z.enum(STUDENT_STATUSES);
-
 export const LESSON_STATUSES = [
   "HELD",
   "TUTOR_ABSENT",
@@ -35,3 +31,13 @@ export const LESSON_STATUS_META: Record<
 
 export const SESSION_COOKIE = "session";
 export const SESSION_TTL_DAYS = 30;
+
+/**
+ * The club is in New Jersey, so every "HH:MM" in the app — a lesson's time slot, a
+ * scheduled session's slot — is this timezone's wall clock. Dates are stored as UTC
+ * midnight; src/lib/club-time.ts is the only place the two meet.
+ */
+export const CLUB_TIME_ZONE = "America/New_York";
+
+/** How long an invite link stays usable. */
+export const INVITE_TTL_DAYS = 7;

@@ -3,6 +3,7 @@
 import { useActionState, useState, useTransition } from "react";
 
 import {
+  removeStudentAction,
   resumeStudentAction,
   stopStudentAction,
   updateStudentAction,
@@ -176,7 +177,89 @@ export function StudentOverview({
       </Card>
 
       <StoppedCard student={student} readOnly={readOnly} />
+      {readOnly ? null : <RemoveStudentCard student={student} />}
     </div>
+  );
+}
+
+/**
+ * Handing a student back to the office. Irreversible for the tutor, so it takes two
+ * deliberate steps: opening the panel, then typing the student's name. There is no
+ * Dialog primitive in this app, and a reveal panel reads better here anyway — the
+ * warning stays on screen while you type rather than vanishing with a click.
+ */
+function RemoveStudentCard({ student }: { student: StudentDetails }) {
+  const [open, setOpen] = useState(false);
+  const [state, formAction, pending] = useActionState(
+    removeStudentAction.bind(null, student.id),
+    initialState,
+  );
+
+  const fullName = `${student.firstName} ${student.lastName}`;
+
+  return (
+    <Card>
+      <CardHeader
+        title="Remove this student"
+        description="Takes them off your list. Only the office can give them back."
+        action={
+          open ? null : (
+            <Button variant="danger" size="sm" onClick={() => setOpen(true)}>
+              Remove student
+            </Button>
+          )
+        }
+      />
+
+      {open ? (
+        <form action={formAction} className="space-y-4 p-5">
+          <div
+            className="rounded-md border border-danger/40 bg-danger-soft px-3 py-2 text-sm text-danger"
+            role="alert"
+          >
+            <p className="font-semibold">You cannot undo this yourself.</p>
+            <p className="mt-1">
+              {fullName} will disappear from your list immediately. Nothing is deleted —
+              every hour, goal and report is kept — but only the office can assign them
+              back to you or to another tutor.
+            </p>
+          </div>
+
+          <FormError message={state.error} />
+
+          <Field
+            label={`Type "${fullName}" to confirm`}
+            htmlFor="confirmName"
+            error={state.fieldErrors?.confirmName}
+            required
+          >
+            <Input id="confirmName" name="confirmName" autoComplete="off" autoFocus required />
+          </Field>
+
+          <Field
+            label="Reason"
+            htmlFor="removedReason"
+            hint="Optional, but it helps the office decide what happens next."
+            error={state.fieldErrors?.removedReason}
+          >
+            <Input
+              id="removedReason"
+              name="removedReason"
+              placeholder="Moved away, schedule clash, finished the programme…"
+            />
+          </Field>
+
+          <div className="flex gap-3">
+            <Button type="submit" variant="danger" disabled={pending}>
+              {pending ? "Removing…" : "Remove student"}
+            </Button>
+            <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+          </div>
+        </form>
+      ) : null}
+    </Card>
   );
 }
 

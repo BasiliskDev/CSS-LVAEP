@@ -11,7 +11,7 @@ export default async function StudentLayout({
   params,
 }: LayoutProps<"/students/[id]">) {
   const { id } = await params;
-  const { student, user, readOnly } = await requireStudent(id);
+  const { student, user, readOnly, unassigned } = await requireStudent(id);
 
   return (
     <AppShell user={user}>
@@ -36,14 +36,28 @@ export default async function StudentLayout({
           ) : (
             <Badge tone="positive">Active</Badge>
           )}
-          {readOnly ? <Badge tone="accent">Office view · read only</Badge> : null}
+          {unassigned ? (
+            <Badge tone="accent">Unassigned</Badge>
+          ) : readOnly ? (
+            <Badge tone="accent">Office view · read only</Badge>
+          ) : null}
         </div>
 
         <p className="mt-1 text-sm text-muted">
           {student.site?.name ?? "No site"} · {fiscalYearLabel(student.fiscalYearStart)}
-          {readOnly ? ` · Tutor: ${student.tutor.displayName}` : ""}
+          {readOnly ? ` · Tutor: ${student.tutor?.displayName ?? "Unassigned"}` : ""}
         </p>
       </div>
+
+      {unassigned ? (
+        <div
+          className="mb-4 rounded-md border border-accent/40 bg-accent-soft px-4 py-3 text-sm text-accent"
+          role="status"
+        >
+          <strong className="font-semibold">Not assigned to a tutor.</strong> Everything on
+          record is kept. The office can assign this student from the Office page.
+        </div>
+      ) : null}
 
       <StudentTabs studentId={student.id} />
 

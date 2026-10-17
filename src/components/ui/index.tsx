@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { ComponentPropsWithoutRef, ReactNode } from "react";
+import type { ComponentProps, ComponentPropsWithoutRef, ReactNode } from "react";
 
 /**
  * Hand-rolled primitives. Small enough not to warrant a component library, and
@@ -143,7 +143,12 @@ export function Textarea({ className, ...props }: ComponentPropsWithoutRef<"text
   return <textarea className={cx(FIELD_BASE, "min-h-24", className)} {...props} />;
 }
 
-export function Select({ className, ...props }: ComponentPropsWithoutRef<"select">) {
+/**
+ * Takes a `ref` — React 19 passes it through as an ordinary prop. A caller sometimes
+ * needs the element itself, for instance to re-assert a controlled value after React
+ * resets a form following a successful server action.
+ */
+export function Select({ className, ...props }: ComponentProps<"select">) {
   return <select className={cx(FIELD_BASE, "pr-8", className)} {...props} />;
 }
 

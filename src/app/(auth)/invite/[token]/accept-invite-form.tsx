@@ -2,13 +2,23 @@
 
 import { useActionState } from "react";
 
-import { registerAction, type AuthFormState } from "../actions";
+import { acceptInviteAction } from "../actions";
 import { Button, Card, Field, FormError, Input } from "@/components/ui";
+import type { FormState } from "@/lib/action-state";
 
-const initialState: AuthFormState = {};
+const initialState: FormState = {};
 
-export function RegisterForm() {
-  const [state, formAction, pending] = useActionState(registerAction, initialState);
+export function AcceptInviteForm({
+  token,
+  defaultDisplayName,
+}: {
+  token: string;
+  defaultDisplayName: string;
+}) {
+  const [state, formAction, pending] = useActionState(
+    acceptInviteAction.bind(null, token),
+    initialState,
+  );
 
   return (
     <Card className="p-5">
@@ -18,6 +28,7 @@ export function RegisterForm() {
         <Field
           label="Your name"
           htmlFor="displayName"
+          hint="This is the name the office sees on your students' forms."
           error={state.fieldErrors?.displayName}
           required
         >
@@ -25,24 +36,23 @@ export function RegisterForm() {
             id="displayName"
             name="displayName"
             autoComplete="name"
-            placeholder="Jane Doe"
-            autoFocus
+            defaultValue={defaultDisplayName}
             required
           />
         </Field>
 
         <Field
-          label="Username"
+          label="Choose a username"
           htmlFor="username"
           hint="Letters, numbers, dots, dashes or underscores."
           error={state.fieldErrors?.username}
           required
         >
-          <Input id="username" name="username" autoComplete="username" required />
+          <Input id="username" name="username" autoComplete="username" autoFocus required />
         </Field>
 
         <Field
-          label="Password"
+          label="Choose a password"
           htmlFor="password"
           hint="At least 8 characters."
           error={state.fieldErrors?.password}
@@ -73,7 +83,7 @@ export function RegisterForm() {
         </Field>
 
         <Button type="submit" disabled={pending} className="w-full">
-          {pending ? "Creating account…" : "Create account"}
+          {pending ? "Creating your account…" : "Create account"}
         </Button>
       </form>
     </Card>

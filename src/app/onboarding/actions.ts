@@ -3,14 +3,13 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
+import { fieldErrorsOf, type FormState } from "@/lib/action-state";
 import { requireUser } from "@/lib/guards";
 import { prisma } from "@/lib/db";
 import { onboardingSchema } from "@/lib/validation";
 
-export type OnboardingState = {
-  error?: string;
-  fieldErrors?: Record<string, string>;
-};
+/** Redirects on success, so it carries no `ok`. */
+export type OnboardingState = FormState;
 
 export async function completeOnboardingAction(
   _prev: OnboardingState,
@@ -28,14 +27,7 @@ export async function completeOnboardingAction(
     defaultTimes: formData.get("defaultTimes"),
   });
 
-  if (!parsed.success) {
-    const fieldErrors: Record<string, string> = {};
-    for (const issue of parsed.error.issues) {
-      const key = String(issue.path[0] ?? "form");
-      fieldErrors[key] ??= issue.message;
-    }
-    return { fieldErrors };
-  }
+  if (!parsed.success) return { fieldErrors: fieldErrorsOf(parsed.error) };
 
   const data = parsed.data;
 

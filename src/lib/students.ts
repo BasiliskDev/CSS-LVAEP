@@ -115,3 +115,36 @@ export async function hoursThisMonth(tutorId: string): Promise<number> {
     lessons.map((l) => ({ ...l, status: l.status as LessonStatus })),
   );
 }
+
+export type UnassignedStudent = StudentSummary & {
+  removedAt: Date | null;
+  removedReason: string | null;
+  removedByName: string | null;
+};
+
+/**
+ * Students sitting in the office's pool, with no tutor.
+ *
+ * Without this the office page simply cannot see them: it reads students through
+ * `tutor.students`, so a removed student is absent rather than flagged — gone from the
+ * only screen that can rescue them.
+ */
+export async function getUnassignedStudents(): Promise<UnassignedStudent[]> {
+  const students = await prisma.student.findMany({
+    where: { tutorId: null },
+    orderBy: [{ removedAt: "desc" }, { lastName: "asc" }],
+    select: {
+      ...SUMMARY_SELECT,
+      removedAt: true,
+      removedReason: true,
+      removedByName: true,
+    },
+  });
+
+  return students.map((student) => ({
+    ...summarize(student),
+    removedAt: student.removedAt,
+    removedReason: student.removedReason,
+    removedByName: student.removedByName,
+  }));
+}

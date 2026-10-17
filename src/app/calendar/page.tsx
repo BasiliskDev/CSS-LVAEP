@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { AppShell } from "@/components/app-shell";
+import { getOccurrencesBetween } from "@/lib/scheduled-sessions";
 import { AbsenceLegend, CalendarMonth } from "@/components/calendar-month";
 import { requireOnboarded } from "@/lib/guards";
 import { prisma } from "@/lib/db";
@@ -81,7 +82,7 @@ export default async function GlobalCalendarPage({
     const row = perStudent.get(key) ?? {
       id: key,
       name: `${lesson.student.firstName} ${lesson.student.lastName}`,
-      tutor: lesson.student.tutor.displayName,
+      tutor: lesson.student.tutor?.displayName ?? "Unassigned",
       hours: 0,
       events: 0,
     };
@@ -99,11 +100,29 @@ export default async function GlobalCalendarPage({
     byDate.set(key, [...(byDate.get(key) ?? []), lesson]);
   }
 
+  // Scheduled sessions the office has set up, so the calendar shows what is *meant* to
+  // happen as well as what was logged. A date with neither is genuinely empty.
+  const occurrences = await getOccurrencesBetween({
+    start,
+    end,
+    tutorId: isOffice ? undefined : user.id,
+  });
+
+  const occurrencesByDate = new Map<string, typeof occurrences>();
+  for (const occurrence of occurrences) {
+    const list = occurrencesByDate.get(occurrence.dateKey) ?? [];
+    list.push(occurrence);
+    occurrencesByDate.set(occurrence.dateKey, list);
+  }
+
+  const dateKeys = new Set([...byDate.keys(), ...occurrencesByDate.keys()]);
+
   const chipsByDate = new Map(
-    [...byDate].map(([date, items]) => [
+    [...dateKeys].map((date) => [
       date,
-      <ul key={date} className="space-y-1">
-        {items.map((lesson) => {
+      <div key={date} className="space-y-1">
+      <ul className="space-y-1">
+        {(byDate.get(date) ?? []).map((lesson) => {
           const meta = LESSON_STATUS_META[lesson.status as LessonStatus];
           const held = lesson.status === "HELD";
           const name = `${lesson.student.firstName} ${lesson.student.lastName.charAt(0)}.`;
@@ -116,7 +135,7 @@ export default async function GlobalCalendarPage({
                   formatTimeRange(lesson.startTime, lesson.endTime),
                   held ? `${lesson.hours} h` : meta.label,
                   lesson.topics,
-                  isOffice ? `Tutor: ${lesson.student.tutor.displayName}` : null,
+                  isOffice ? `Tutor: ${lesson.student.tutor?.displayName ?? "Unassigned"}` : null,
                 ]
                   .filter(Boolean)
                   .join(" · ")}
@@ -132,7 +151,50 @@ export default async function GlobalCalendarPage({
             </li>
           );
         })}
-      </ul>,
+      </ul>
+
+      {/* Scheduled but not yet logged: outlined rather than filled, so a glance tells
+          you which sessions still owe hours. */}
+      <ul className="space-y-1">
+        {(occurrencesByDate.get(date) ?? [])
+          .filter((occurrence) => occurrence.loggedStudentIds.length < occurrence.students.length)
+          .map((occurrence) => {
+            const missing = occurrence.students.length - occurrence.loggedStudentIds.length;
+            const label = occurrence.title ?? `${missing} to log`;
+            return (
+              <li key={`${occurrence.seriesId}-${occurrence.dateKey}`}>
+                <Link
+                  href={
+                    occurrence.skipped
+                      ? `/admin/sessions/${occurrence.seriesId}`
+                      : `/sessions/${occurrence.seriesId}/${occurrence.dateKey}`
+                  }
+                  title={[
+                    formatTimeRange(occurrence.startTime, occurrence.endTime),
+                    occurrence.skipped
+                      ? `Cancelled${occurrence.skipReason ? `: ${occurrence.skipReason}` : ""}`
+                      : `${missing} of ${occurrence.students.length} still to log`,
+                    occurrence.students
+                      .map((student) => `${student.firstName} ${student.lastName}`)
+                      .join(", "),
+                    isOffice ? `Tutor: ${occurrence.tutorName}` : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                  className={cx(
+                    "block truncate rounded border border-dashed px-1.5 py-1 text-[11px] font-medium transition-opacity hover:opacity-80",
+                    occurrence.skipped
+                      ? "border-line-strong text-faint line-through"
+                      : "border-brand/50 text-brand",
+                  )}
+                >
+                  {occurrence.skipped ? "cancelled" : label}
+                </Link>
+              </li>
+            );
+          })}
+      </ul>
+      </div>,
     ]),
   );
 
@@ -170,6 +232,10 @@ export default async function GlobalCalendarPage({
         }
         legend={
           <>
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block h-2.5 w-2.5 rounded-sm border border-dashed border-brand/60" />{" "}
+              scheduled, not logged
+            </span>
             <span className="flex items-center gap-1.5">
               <span className="inline-block h-2.5 w-2.5 rounded-sm bg-brand" /> hours
               tutored

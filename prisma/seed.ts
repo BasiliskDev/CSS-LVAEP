@@ -28,7 +28,19 @@ async function main() {
 
   const existing = await prisma.user.findUnique({ where: { username } });
   if (existing) {
-    console.log(`Admin "${username}" already exists — leaving it alone.`);
+    // Self-registration is closed and the app has no password reset, so this is the only
+    // way back into a locked-out office account. It is opt-in precisely because a seed
+    // that silently reset a password on every deploy would be a back door.
+    if (process.env.SEED_ADMIN_RESET === "1") {
+      await prisma.user.update({
+        where: { id: existing.id },
+        data: { passwordHash: await bcrypt.hash(password, 10), role: "ADMIN" },
+      });
+      console.log(`Reset admin "${username}" to the password in SEED_ADMIN_PASSWORD.`);
+    } else {
+      console.log(`Admin "${username}" already exists — leaving it alone.`);
+      console.log("To reset its password, re-run with SEED_ADMIN_RESET=1.");
+    }
   } else {
     await prisma.user.create({
       data: {
@@ -36,6 +48,7 @@ async function main() {
         displayName: "Office Admin",
         passwordHash: await bcrypt.hash(password, 10),
         role: "ADMIN",
+        email: process.env.SEED_ADMIN_EMAIL ?? null,
         siteId: site?.id,
         onboardedAt: new Date(),
       },

@@ -1,3 +1,4 @@
+import { todayInClubTZ } from "./club-time";
 import { LESSON_STATUS_META, type LessonStatus } from "./constants";
 
 /**
@@ -109,10 +110,16 @@ export function formatDateDisplay(date: Date): string {
   });
 }
 
-/** Today at UTC midnight — the default for a new lesson. */
+/**
+ * Today at UTC midnight — the default for a new lesson, and what "today" means on every
+ * screen.
+ *
+ * "Today" is the club's day, not the server's. Reading the host's UTC date instead would
+ * roll over at 8 PM in New Jersey, so an evening session logged with the default date
+ * would land in tomorrow — and on June 30, in the next fiscal year.
+ */
 export function todayUTC(): Date {
-  const now = new Date();
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  return todayInClubTZ();
 }
 
 // --- Attendance summary ---------------------------------------------------------
