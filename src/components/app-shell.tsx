@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import type { SessionUser } from "@/lib/auth";
+import { homeFor, type SessionUser } from "@/lib/auth";
 import { logoutAction } from "@/app/(auth)/actions";
 import { Button } from "@/components/ui";
 
@@ -12,18 +12,22 @@ export function AppShell({
   user: SessionUser;
   children: React.ReactNode;
 }) {
+  // The office keeps no students of its own, so it gets two tabs and lands on the
+  // control panel instead of the (for them, always empty) student dashboard.
+  const isOffice = user.role === "ADMIN";
+
   return (
     <div className="flex min-h-full flex-col">
       <header className="border-b border-line bg-surface">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-3 px-4 py-3 sm:px-6">
-          <Link href="/dashboard" className="font-semibold text-ink">
+          <Link href={homeFor(user)} className="font-semibold text-ink">
             Tutor<span className="text-brand">Log</span>
           </Link>
 
           <nav className="flex items-center gap-1 text-sm">
-            <NavLink href="/dashboard">Students</NavLink>
+            {isOffice ? null : <NavLink href="/dashboard">Students</NavLink>}
             <NavLink href="/calendar">Calendar</NavLink>
-            {user.role === "ADMIN" ? <NavLink href="/admin">Office</NavLink> : null}
+            {isOffice ? <NavLink href="/admin">Office</NavLink> : null}
           </nav>
 
           <div className="ml-auto flex items-center gap-3">

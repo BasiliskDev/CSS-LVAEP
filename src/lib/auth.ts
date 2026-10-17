@@ -28,6 +28,16 @@ export type SessionUser = {
   siteId: string | null;
 };
 
+/**
+ * Where a signed-in account belongs. The office runs the control panel and is never
+ * assigned students, so the student dashboard is not their home — every redirect and
+ * the header logo go through here rather than hard-coding "/dashboard".
+ */
+export function homeFor(user: { onboardedAt: Date | null; role: string }): string {
+  if (!user.onboardedAt) return "/onboarding";
+  return user.role === "ADMIN" ? "/admin" : "/dashboard";
+}
+
 export function hashPassword(password: string): Promise<string> {
   return bcrypt.hash(password, BCRYPT_ROUNDS);
 }

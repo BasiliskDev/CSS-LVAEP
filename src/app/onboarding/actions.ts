@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
 import { fieldErrorsOf, type FormState } from "@/lib/action-state";
+import { homeFor } from "@/lib/auth";
 import { requireUser } from "@/lib/guards";
 import { prisma } from "@/lib/db";
 import { onboardingSchema } from "@/lib/validation";
@@ -64,5 +65,5 @@ export async function completeOnboardingAction(
   });
 
   revalidatePath("/", "layout");
-  redirect("/dashboard");
+  redirect(homeFor({ onboardedAt: new Date(), role: user.role }));
 }

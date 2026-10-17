@@ -6,6 +6,7 @@ import {
   createSession,
   destroySession,
   getCurrentUser,
+  homeFor,
   pruneExpiredSessions,
   verifyPassword,
 } from "@/lib/auth";
@@ -31,7 +32,7 @@ export async function loginAction(
 
   const user = await prisma.user.findUnique({
     where: { username: parsed.data.username },
-    select: { id: true, passwordHash: true, onboardedAt: true },
+    select: { id: true, passwordHash: true, onboardedAt: true, role: true },
   });
 
   // One generic message for both branches, so the form can't be used to
@@ -42,7 +43,7 @@ export async function loginAction(
 
   await pruneExpiredSessions();
   await createSession(user.id);
-  redirect(user.onboardedAt ? "/dashboard" : "/onboarding");
+  redirect(homeFor(user));
 }
 
 export async function logoutAction(): Promise<void> {
@@ -54,5 +55,5 @@ export async function logoutAction(): Promise<void> {
 export async function currentUserDestination(): Promise<string> {
   const user = await getCurrentUser();
   if (!user) return "/login";
-  return user.onboardedAt ? "/dashboard" : "/onboarding";
+  return homeFor(user);
 }

@@ -253,6 +253,15 @@ export default async function AdminPage() {
                   </span>
                 }
                 description={`${tutor.site?.name ?? "No site"} · ${tutor.activeCount} active · ${tutor.totalHours} hours`}
+                action={
+                  <ButtonLink
+                    href={`/calendar?tutor=${tutor.id}`}
+                    variant="secondary"
+                    size="sm"
+                  >
+                    View calendar
+                  </ButtonLink>
+                }
               />
 
               {/* Student events — the schedule the office owns. */}

@@ -14,6 +14,8 @@ import {
   todayUTC,
 } from "@/lib/fiscal-year";
 import { formatTimeRange } from "@/lib/time-slot";
+import { hasSlotEnded } from "@/lib/club-time";
+import { TutorFilter, type TutorOption } from "@/components/tutor-filter";
 import { Badge, Card, CardHeader, EmptyState, StatTile, cx } from "@/components/ui";
 
 export const metadata = { title: "Calendar — TutorLog" };
@@ -36,11 +38,31 @@ export default async function GlobalCalendarPage({
   // The office sees every tutor's events; a tutor sees only their own students'.
   const isOffice = user.role === "ADMIN";
 
+  // The office chooses whose calendar to read. Tutors are listed even when they have
+  // nothing this month: an empty calendar is an answer, not a missing option.
+  const tutors = isOffice
+    ? await prisma.user.findMany({
+        where: { role: "TUTOR" },
+        select: { id: true, displayName: true },
+        orderBy: { displayName: "asc" },
+      })
+    : [];
+
+  // Resolve the requested tutor against the real list, so an unknown or stale id falls
+  // back to "all tutors" rather than rendering an unexplained empty month.
+  const requestedTutorId = typeof query.tutor === "string" ? query.tutor : undefined;
+  const selectedTutor = tutors.find((tutor) => tutor.id === requestedTutorId) ?? null;
+
+  const calendarHref = (y: number, m: number, tutorId: string | null) =>
+    `/calendar?month=${formatMonthParam(y, m)}${tutorId ? `&tutor=${tutorId}` : ""}`;
+
   // Fetch the whole month in one query rather than per student.
   const start = new Date(Date.UTC(year, month, 1));
   const end = new Date(Date.UTC(year, month + 1, 1));
 
-  const lessons = await prisma.lesson.findMany({
+  // One month of lessons for everyone the viewer may see. The office then narrows in
+  // memory, which is what lets the tutor pills carry their own counts.
+  const allLessons = await prisma.lesson.findMany({
     where: {
       date: { gte: start, lt: end },
       student: isOffice ? undefined : { tutorId: user.id },
@@ -59,11 +81,15 @@ export default async function GlobalCalendarPage({
           id: true,
           firstName: true,
           lastName: true,
-          tutor: { select: { displayName: true } },
+          tutor: { select: { id: true, displayName: true } },
         },
       },
     },
   });
+
+  const lessons = selectedTutor
+    ? allLessons.filter((lesson) => lesson.student.tutor?.id === selectedTutor.id)
+    : allLessons;
 
   const monthHours =
     Math.round(
@@ -102,11 +128,35 @@ export default async function GlobalCalendarPage({
 
   // Scheduled sessions the office has set up, so the calendar shows what is *meant* to
   // happen as well as what was logged. A date with neither is genuinely empty.
-  const occurrences = await getOccurrencesBetween({
+  const allOccurrences = await getOccurrencesBetween({
     start,
     end,
     tutorId: isOffice ? undefined : user.id,
   });
+
+  const occurrences = selectedTutor
+    ? allOccurrences.filter((occurrence) => occurrence.tutorId === selectedTutor.id)
+    : allOccurrences;
+
+  // Per-tutor backlog for the pills: only sessions whose slot has already passed count,
+  // so a series scheduled later this month doesn't read as overdue.
+  const toLogByTutor = new Map<string, number>();
+  for (const occurrence of allOccurrences) {
+    if (occurrence.skipped) continue;
+    if (!hasSlotEnded(occurrence.date, occurrence.endTime)) continue;
+    const missing = occurrence.students.length - occurrence.loggedStudentIds.length;
+    if (missing > 0) {
+      toLogByTutor.set(
+        occurrence.tutorId,
+        (toLogByTutor.get(occurrence.tutorId) ?? 0) + missing,
+      );
+    }
+  }
+
+  const tutorOptions: TutorOption[] = tutors.map((tutor) => ({
+    ...tutor,
+    toLog: toLogByTutor.get(tutor.id) ?? 0,
+  }));
 
   const occurrencesByDate = new Map<string, typeof occurrences>();
   for (const occurrence of occurrences) {
@@ -201,13 +251,25 @@ export default async function GlobalCalendarPage({
   return (
     <AppShell user={user}>
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold text-ink">Calendar</h1>
+        <h1 className="text-2xl font-semibold text-ink">
+          {selectedTutor ? selectedTutor.displayName : "Calendar"}
+        </h1>
         <p className="mt-1 text-sm text-muted">
-          {isOffice
-            ? "Every tutoring event on record, across all tutors."
-            : "Every tutoring event across all of your students."}
+          {selectedTutor
+            ? "Their scheduled sessions and the hours they have logged."
+            : isOffice
+              ? "Every tutoring event on record, across all tutors."
+              : "Every tutoring event across all of your students."}
         </p>
       </div>
+
+      {isOffice ? (
+        <TutorFilter
+          tutors={tutorOptions}
+          selectedId={selectedTutor?.id ?? null}
+          hrefFor={(tutorId) => calendarHref(year, month, tutorId)}
+        />
+      ) : null}
 
       <div className="mb-6 grid gap-3 sm:grid-cols-3">
         <StatTile
@@ -222,7 +284,7 @@ export default async function GlobalCalendarPage({
       <CalendarMonth
         year={year}
         month={month}
-        monthHref={(y, m) => `/calendar?month=${formatMonthParam(y, m)}`}
+        monthHref={(y, m) => calendarHref(y, m, selectedTutor?.id ?? null)}
         chipsByDate={chipsByDate}
         summary={
           <span className="text-sm text-muted">
@@ -267,7 +329,7 @@ export default async function GlobalCalendarPage({
                   >
                     <span className="min-w-0">
                       <span className="font-medium text-ink">{student.name}</span>
-                      {isOffice ? (
+                      {isOffice && !selectedTutor ? (
                         <span className="ml-2 text-xs text-muted">{student.tutor}</span>
                       ) : null}
                     </span>

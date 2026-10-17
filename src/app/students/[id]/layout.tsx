@@ -16,8 +16,13 @@ export default async function StudentLayout({
   return (
     <AppShell user={user}>
       <div className="mb-6">
-        <Link href="/dashboard" className="text-sm text-muted hover:text-ink">
-          ← All students
+        {/* The office has no student list of its own, so send them back to the panel
+            they arrived from rather than through a redirect. */}
+        <Link
+          href={user.role === "ADMIN" ? "/admin" : "/dashboard"}
+          className="text-sm text-muted hover:text-ink"
+        >
+          {user.role === "ADMIN" ? "← Office" : "← All students"}
         </Link>
 
         <div className="mt-2 flex flex-wrap items-center gap-3">

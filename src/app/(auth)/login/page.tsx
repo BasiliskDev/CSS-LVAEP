@@ -1,13 +1,13 @@
 import { redirect } from "next/navigation";
 
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, homeFor } from "@/lib/auth";
 import { LoginForm } from "./login-form";
 
 export const metadata = { title: "Sign in — TutorLog" };
 
 export default async function LoginPage() {
   const user = await getCurrentUser();
-  if (user) redirect(user.onboardedAt ? "/dashboard" : "/onboarding");
+  if (user) redirect(homeFor(user));
 
   return (
     <>

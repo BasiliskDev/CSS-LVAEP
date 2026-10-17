@@ -1,7 +1,9 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 
 import { AppShell } from "@/components/app-shell";
 import { prisma } from "@/lib/db";
+import { homeFor } from "@/lib/auth";
 import { requireOnboarded } from "@/lib/guards";
 import { getStudentSummaries, hoursThisMonth } from "@/lib/students";
 import { fiscalYearLabel } from "@/lib/fiscal-year";
@@ -14,6 +16,10 @@ export const metadata = { title: "Students — TutorLog" };
 
 export default async function DashboardPage() {
   const user = await requireOnboarded();
+
+  // The office is never assigned students, so this page would always be empty for them.
+  // Catching it here rather than in each caller covers login, onboarding and old links.
+  if (user.role === "ADMIN") redirect(homeFor(user));
 
   const [students, monthHours, profile] = await Promise.all([
     getStudentSummaries(user.id),

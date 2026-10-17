@@ -81,14 +81,14 @@ provider-specific code is in [`src/lib/email.ts`](src/lib/email.ts).
 | `/login` | Username + password. There is no sign-up form — accounts come from invites. |
 | `/invite/[token]` | Public. Where an invited tutor chooses their username and password. |
 | `/onboarding` | Tutor name, phone, site, usual days/times — the form's header block. Doubles as the profile editor afterwards. |
-| `/dashboard` | The tutor's students, split Active / Stopped, with hours this month and this year. |
+| `/dashboard` | The tutor's students, split Active / Stopped, with hours this month and this year. The office has no students, so an `ADMIN` is sent to `/admin` instead. |
 | `/students/[id]` | **Overview** — student details, the STOPPED box (reason required), and removal. |
 | `…/attendance` | Every tutoring event, as a **list** or a **calendar**, plus the Jul–Jun monthly totals. |
 | `…/print` | The filled paper form for one student, ready to print. |
 | `/print` | Every student's form, one page each, printed in a single run. |
 | `…/achievements` | The 17-item checklist plus custom goals. |
 | `…/reports` | Written progress reports. |
-| `/calendar` | **Global calendar** — every event across all your students in one month view. |
+| `/calendar` | **Global calendar** — every event across all your students in one month view. The office gets a tutor switcher: all tutors, or one at a time (`?tutor=<id>`). |
 | `/admin` | **Office.** Every tutor and student, plus the pool of unassigned students waiting to be given to a tutor. Requires an `ADMIN` account. |
 | `/admin/invites` | Create, resend and revoke invites. Each open invite shows its copyable link. |
 | `/admin/students/new` | Create a student and assign them to a tutor. Only the office can do this. |
@@ -192,7 +192,15 @@ shared day. Ad-hoc logging happens on a student's page; scheduled logging happen
 the session chip.
 
 Signed in as an `ADMIN`, the same page widens to every tutor's events and names the tutor
-on each chip — the office's version of the same question.
+on each chip, with a row of pills above it to narrow the month to one tutor — the office's
+version of the same question, asked of whoever they like. Each pill carries a count of
+that tutor's past sessions still waiting on hours, and each tutor on `/admin` links
+straight to their own calendar. The selected tutor lives in the URL, so a single tutor's
+calendar is a link you can send them, and paging between months keeps them selected.
+
+That switcher is also why the office only has two tabs. They are never assigned students,
+so the Students tab would always be empty for them: their nav is **Calendar** and
+**Office**, and both the logo and every post-login redirect lead to the control panel.
 
 It is built on [`CalendarMonth`](src/components/calendar-month.tsx), which owns the month
 navigation, weekday row and day cells.
