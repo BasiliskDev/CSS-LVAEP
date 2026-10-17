@@ -14,7 +14,8 @@ export default async function NewStudentPage() {
     // Only onboarded accounts: an invited tutor who hasn't finished setting up has no
     // site on file, and assigning to them would strand the student.
     prisma.user.findMany({
-      where: { onboardedAt: { not: null } },
+      // Tutors only: the office keeps the records, it does not keep students.
+      where: { role: "TUTOR", onboardedAt: { not: null } },
       orderBy: { displayName: "asc" },
       select: { id: true, displayName: true, username: true, defaultDays: true, defaultTimes: true, siteId: true },
     }),

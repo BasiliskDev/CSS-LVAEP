@@ -40,6 +40,7 @@ export default async function OnboardingPage() {
       <OnboardingForm
         sites={sites}
         isFirstRun={isFirstRun}
+        isOffice={user.role === "ADMIN"}
         profile={{
           displayName: profile?.displayName ?? user.displayName,
           phone: profile?.phone ?? "",

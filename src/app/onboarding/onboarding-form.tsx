@@ -19,10 +19,13 @@ export function OnboardingForm({
   sites,
   profile,
   isFirstRun,
+  isOffice,
 }: {
   sites: Array<{ id: string; name: string }>;
   profile: TutorProfile;
   isFirstRun: boolean;
+  /** Office accounts keep no students, so the tutoring defaults are meaningless to them. */
+  isOffice: boolean;
 }) {
   const [state, formAction, pending] = useActionState(
     completeOnboardingAction,
@@ -102,33 +105,35 @@ export function OnboardingForm({
           </div>
         ) : null}
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field
-            label="Usual day(s)"
-            htmlFor="defaultDays"
-            hint="Prefills new students."
-            error={state.fieldErrors?.defaultDays}
-          >
-            <Input
-              id="defaultDays"
-              name="defaultDays"
-              defaultValue={profile.defaultDays}
-              placeholder="Tue & Thu"
-            />
-          </Field>
-          <Field
-            label="Usual time(s)"
-            htmlFor="defaultTimes"
-            error={state.fieldErrors?.defaultTimes}
-          >
-            <Input
-              id="defaultTimes"
-              name="defaultTimes"
-              defaultValue={profile.defaultTimes}
-              placeholder="6:00–7:30 pm"
-            />
-          </Field>
-        </div>
+        {isOffice ? null : (
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field
+              label="Usual day(s)"
+              htmlFor="defaultDays"
+              hint="Prefills new students."
+              error={state.fieldErrors?.defaultDays}
+            >
+              <Input
+                id="defaultDays"
+                name="defaultDays"
+                defaultValue={profile.defaultDays}
+                placeholder="Tue & Thu"
+              />
+            </Field>
+            <Field
+              label="Usual time(s)"
+              htmlFor="defaultTimes"
+              error={state.fieldErrors?.defaultTimes}
+            >
+              <Input
+                id="defaultTimes"
+                name="defaultTimes"
+                defaultValue={profile.defaultTimes}
+                placeholder="6:00–7:30 pm"
+              />
+            </Field>
+          </div>
+        )}
 
         <Button type="submit" disabled={pending} className="w-full">
           {pending ? "Saving…" : isFirstRun ? "Save and continue" : "Save changes"}

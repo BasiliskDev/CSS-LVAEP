@@ -19,7 +19,8 @@ export default async function AdminSessionsPage() {
 
   const [tutorRows, sites, sessions] = await Promise.all([
     prisma.user.findMany({
-      where: { onboardedAt: { not: null } },
+      // Tutors only: the office keeps the records, it does not keep students.
+      where: { role: "TUTOR", onboardedAt: { not: null } },
       orderBy: { displayName: "asc" },
       select: {
         id: true,

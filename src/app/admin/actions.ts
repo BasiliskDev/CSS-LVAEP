@@ -168,9 +168,12 @@ export async function createStudentAction(
 
   const tutor = await prisma.user.findUnique({
     where: { id: tutorId },
-    select: { id: true, siteId: true },
+    select: { id: true, siteId: true, role: true },
   });
   if (!tutor) return { fieldErrors: { tutorId: "That tutor no longer exists" } };
+  if (tutor.role !== "TUTOR") {
+    return { fieldErrors: { tutorId: "Office accounts don't keep students" } };
+  }
 
   const student = await prisma.student.create({
     // Fall back to the tutor's own site, the way the tutor-side form used to.
@@ -196,10 +199,13 @@ export async function reassignStudentAction(
 
   const [student, tutor] = await Promise.all([
     prisma.student.findUnique({ where: { id: studentId }, select: { id: true } }),
-    prisma.user.findUnique({ where: { id: tutorId }, select: { id: true } }),
+    prisma.user.findUnique({ where: { id: tutorId }, select: { id: true, role: true } }),
   ]);
   if (!student) return { error: "That student no longer exists." };
   if (!tutor) return { fieldErrors: { tutorId: "That tutor no longer exists" } };
+  if (tutor.role !== "TUTOR") {
+    return { fieldErrors: { tutorId: "Office accounts don't keep students" } };
+  }
 
   await prisma.$transaction([
     // Drop memberships in anyone else's sessions, or the previous tutor keeps being

@@ -36,10 +36,18 @@ function readSessionForm(formData: FormData) {
 }
 
 /**
- * Students have to belong to the session's own tutor. Otherwise the tutor would be
- * reminded to log hours for someone they can't even open.
+ * A session belongs to a tutor, and its students have to be that tutor's own —
+ * otherwise the tutor would be reminded to log hours for someone they can't open.
+ * The office schedules sessions; it never runs them.
  */
 async function checkStudentsBelongToTutor(studentIds: string[], tutorId: string) {
+  const tutor = await prisma.user.findUnique({
+    where: { id: tutorId },
+    select: { role: true },
+  });
+  if (!tutor) return "That tutor no longer exists.";
+  if (tutor.role !== "TUTOR") return "Office accounts don't run sessions.";
+
   const students = await prisma.student.findMany({
     where: { id: { in: studentIds } },
     select: { id: true, firstName: true, lastName: true, tutorId: true },
