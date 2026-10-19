@@ -243,6 +243,43 @@ export const DAYS_IN_GRID = 31;
 
 export const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 
+/** Full names, indexed the same way, for prose and for the day picker's labels. */
+export const WEEKDAY_NAMES = [
+  "Sunday",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+] as const;
+
+/**
+ * How a recurrence rule's days read in a sentence: "Tuesdays",
+ * "Tuesdays & Thursdays", "Mon, Wed, Thu & Fri". Four screens used to keep their own
+ * copy of a plural-weekday array, which only worked while a series had exactly one day.
+ *
+ * Out-of-range values are dropped rather than printed as "undefined", so a junk row
+ * degrades to "No days" instead of to nonsense.
+ */
+export function formatWeekdays(weekdays: readonly number[]): string {
+  const days = [...new Set(weekdays)]
+    .filter((weekday) => Number.isInteger(weekday) && weekday >= 0 && weekday <= 6)
+    .sort((a, b) => a - b);
+
+  if (days.length === 0) return "No days";
+
+  // Full plural names up to three days; past that the line stops being readable, so it
+  // falls back to the short labels.
+  const names =
+    days.length > 3
+      ? days.map((weekday) => WEEKDAY_LABELS[weekday])
+      : days.map((weekday) => `${WEEKDAY_NAMES[weekday]}s`);
+
+  if (names.length === 1) return names[0];
+  return `${names.slice(0, -1).join(", ")} & ${names[names.length - 1]}`;
+}
+
 export type CalendarDay = {
   date: Date;
   key: string;

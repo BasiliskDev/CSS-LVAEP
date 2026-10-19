@@ -12,7 +12,7 @@ const d = (iso: string) => parseDateInput(iso)!;
 /** Tuesdays 17:30-18:30 club time, through the autumn term. */
 const series: SeriesForPending = {
   id: "s1",
-  weekday: 2,
+  weekdays: [2],
   startTime: "17:30",
   endTime: "18:30",
   startsOn: d("2026-09-01"),
@@ -110,7 +110,7 @@ describe("which finished sessions still owe hours", () => {
   it("returns the oldest gap first, so a backlog clears in order", () => {
     const pending = run({
       series: [
-        { ...series, id: "late", weekday: 4, studentIds: ["ada"] }, // Thursdays
+        { ...series, id: "late", weekdays: [4], studentIds: ["ada"] }, // Thursdays
         series,
       ],
       windowStart: d("2026-09-01"),

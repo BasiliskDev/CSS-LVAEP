@@ -6,7 +6,8 @@ import { fieldErrorsOf, type ActionState } from "@/lib/action-state";
 import { prisma } from "@/lib/db";
 import { parseDateInput } from "@/lib/fiscal-year";
 import { requireAdmin } from "@/lib/guards";
-import { countOccurrences, isOccurrence } from "@/lib/recurrence";
+import { isOccurrence } from "@/lib/recurrence";
+import { ruleOf } from "@/lib/scheduled-sessions";
 import { scheduledSessionSchema, sessionSkipSchema } from "@/lib/validation";
 
 /** Scheduling is the office's job, so every action here is behind requireAdmin(). */
@@ -23,11 +24,15 @@ function readSessionForm(formData: FormData) {
   return {
     tutorId: formData.get("tutorId"),
     title: formData.get("title"),
-    weekday: formData.get("weekday"),
+    // getAll, because the day picker is one checkbox per day: an unchecked set posts
+    // nothing and a two-day series posts twice under the same name.
+    weekdays: formData.getAll("weekdays").map(String),
     startTime: formData.get("startTime"),
     endTime: formData.get("endTime"),
     startsOn: formData.get("startsOn"),
     endsOn: formData.get("endsOn"),
+    endMode: formData.get("endMode"),
+    occurrenceCount: formData.get("occurrenceCount"),
     siteId: formData.get("siteId"),
     notes: formData.get("notes"),
     // getAll returns FormDataEntryValue[], so the cast to string is not optional.
@@ -78,22 +83,19 @@ export async function createScheduledSessionAction(
   const problem = await checkStudentsBelongToTutor(data.studentIds, data.tutorId);
   if (problem) return { fieldErrors: { studentIds: problem } };
 
-  if (countOccurrences({ weekday: data.weekday, startsOn: data.startsOn, endsOn: data.endsOn }) === 0) {
-    return {
-      fieldErrors: { endsOn: "That range contains no occurrences of the day you picked" },
-    };
-  }
-
   await prisma.scheduledSession.create({
     data: {
       tutorId: data.tutorId,
       siteId: data.siteId || null,
       title: data.title,
-      weekday: data.weekday,
+      weekdays: data.weekdays,
       startTime: data.startTime,
       endTime: data.endTime,
       startsOn: data.startsOn,
+      // Always a real date, whichever way the office ended the series.
       endsOn: data.endsOn,
+      endMode: data.endMode,
+      occurrenceCount: data.occurrenceCount,
       notes: data.notes,
       students: { create: data.studentIds.map((studentId) => ({ studentId })) },
     },
@@ -130,11 +132,13 @@ export async function updateScheduledSessionAction(
         tutorId: data.tutorId,
         siteId: data.siteId || null,
         title: data.title,
-        weekday: data.weekday,
+        weekdays: data.weekdays,
         startTime: data.startTime,
         endTime: data.endTime,
         startsOn: data.startsOn,
         endsOn: data.endsOn,
+        endMode: data.endMode,
+        occurrenceCount: data.occurrenceCount,
         notes: data.notes,
       },
     }),
@@ -193,7 +197,7 @@ export async function skipOccurrenceAction(
   const series = await prisma.scheduledSession.findUnique({
     where: { id: scheduledSessionId },
     select: {
-      weekday: true,
+      weekdays: true,
       startsOn: true,
       endsOn: true,
       students: { select: { studentId: true } },
@@ -202,7 +206,7 @@ export async function skipOccurrenceAction(
   if (!series) return { error: "That session no longer exists." };
 
   // Never trust a posted date — it has to be a real occurrence of this rule.
-  if (!isOccurrence({ weekday: series.weekday, startsOn: series.startsOn, endsOn: series.endsOn }, date)) {
+  if (!isOccurrence(ruleOf(series), date)) {
     return { fieldErrors: { date: "That date isn't one of this session's dates" } };
   }
 

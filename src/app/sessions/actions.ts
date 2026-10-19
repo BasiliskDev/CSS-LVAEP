@@ -8,6 +8,7 @@ import { prisma } from "@/lib/db";
 import { parseDateInput } from "@/lib/fiscal-year";
 import { requireScheduledSession } from "@/lib/guards";
 import { isOccurrence } from "@/lib/recurrence";
+import { ruleOf } from "@/lib/scheduled-sessions";
 import { lessonSchema } from "@/lib/validation";
 
 /** Exactly what lessonSchema produces, so a row can't drift from what Prisma accepts. */
@@ -38,7 +39,7 @@ export async function logSessionOccurrenceAction(
 
   // The date arrived in a URL path segment, so this is the only thing between it and an
   // arbitrary write.
-  if (!isOccurrence({ weekday: series.weekday, startsOn: series.startsOn, endsOn: series.endsOn }, date)) {
+  if (!isOccurrence(ruleOf(series), date)) {
     return { error: "That date isn't part of this session." };
   }
 

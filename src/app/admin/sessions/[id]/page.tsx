@@ -5,7 +5,7 @@ import { AppShell } from "@/components/app-shell";
 import { Badge, Button, Card } from "@/components/ui";
 import { hasSlotEnded } from "@/lib/club-time";
 import { prisma } from "@/lib/db";
-import { formatDateDisplay, formatDateInput } from "@/lib/fiscal-year";
+import { formatDateDisplay, formatDateInput, formatWeekdays } from "@/lib/fiscal-year";
 import { requireAdmin } from "@/lib/guards";
 import { weeklyOccurrences } from "@/lib/recurrence";
 import { formatTimeRange } from "@/lib/time-slot";
@@ -17,8 +17,6 @@ import { OccurrenceList, type OccurrenceRow } from "./occurrence-list";
 import { SessionForm, type SessionDraft, type SessionTutor } from "../session-form";
 
 export const metadata = { title: "Session — TutorLog" };
-
-const WEEKDAY_NAMES = ["Sundays", "Mondays", "Tuesdays", "Wednesdays", "Thursdays", "Fridays", "Saturdays"];
 
 export default async function AdminSessionPage({ params }: PageProps<"/admin/sessions/[id]">) {
   const user = await requireAdmin();
@@ -69,7 +67,7 @@ export default async function AdminSessionPage({ params }: PageProps<"/admin/ses
   }
 
   const occurrences: OccurrenceRow[] = weeklyOccurrences({
-    weekday: session.weekday,
+    weekdays: session.weekdays,
     startsOn: session.startsOn,
     endsOn: session.endsOn,
   }).map((date) => {
@@ -90,16 +88,20 @@ export default async function AdminSessionPage({ params }: PageProps<"/admin/ses
     id: session.id,
     tutorId: session.tutorId,
     title: session.title,
-    weekday: session.weekday,
+    weekdays: session.weekdays,
     startTime: session.startTime,
     endTime: session.endTime,
     startsOn: formatDateInput(session.startsOn),
     endsOn: formatDateInput(session.endsOn),
+    // Reopen the form on whichever control the office originally used.
+    endMode: session.endMode === "AFTER_COUNT" ? "AFTER_COUNT" : "ON_DATE",
+    occurrenceCount: session.occurrenceCount,
     siteId: session.siteId,
     notes: session.notes,
     studentIds: session.students.map((membership) => membership.studentId),
   };
 
+  const days = formatWeekdays(session.weekdays);
   const archived = session.status !== "ACTIVE";
 
   return (
@@ -110,13 +112,22 @@ export default async function AdminSessionPage({ params }: PageProps<"/admin/ses
         </Link>
         <div className="mt-2 flex flex-wrap items-center gap-3">
           <h1 className="text-2xl font-semibold text-ink">
-            {session.title ?? `${WEEKDAY_NAMES[session.weekday]} with ${session.tutor.displayName}`}
+            {session.title ?? `${days} with ${session.tutor.displayName}`}
           </h1>
           {archived ? <Badge tone="neutral">Archived</Badge> : <Badge tone="positive">Active</Badge>}
         </div>
         <p className="mt-1 text-sm text-muted">
-          {WEEKDAY_NAMES[session.weekday]} {formatTimeRange(session.startTime, session.endTime)} ·{" "}
+          {days} {formatTimeRange(session.startTime, session.endTime)} ·{" "}
           {session.tutor.displayName} · {session.site?.name ?? "No site"}
+        </p>
+        <p className="mt-1 text-sm text-muted">
+          {occurrences.length} {occurrences.length === 1 ? "meeting" : "meetings"} ·{" "}
+          {formatDateDisplay(session.startsOn)} – {formatDateDisplay(session.endsOn)}
+          {session.endMode === "AFTER_COUNT"
+            ? ` · ends after ${session.occurrenceCount} ${
+                session.occurrenceCount === 1 ? "meeting" : "meetings"
+              }`
+            : null}
         </p>
       </div>
 

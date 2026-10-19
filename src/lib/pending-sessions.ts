@@ -23,7 +23,7 @@ export const PENDING_GRACE_MINUTES = 60;
 
 export type SeriesForPending = {
   id: string;
-  weekday: number;
+  weekdays: number[];
   startTime: string;
   endTime: string;
   startsOn: Date;
@@ -76,7 +76,7 @@ export function missingOccurrences(args: {
     if (entry.studentIds.length === 0) continue;
 
     const rule: WeeklyRule = {
-      weekday: entry.weekday,
+      weekdays: entry.weekdays,
       startsOn: entry.startsOn,
       endsOn: entry.endsOn,
     };

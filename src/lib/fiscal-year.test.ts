@@ -10,6 +10,7 @@ import {
   fiscalYearStartFor,
   formatDateInput,
   formatMonthParam,
+  formatWeekdays,
   isDateInFiscalYear,
   monthLabel,
   parseDateInput,
@@ -265,5 +266,32 @@ describe("fiscalCellKey", () => {
     );
     expect(summary.byDate.get(fiscalCellKey(2026, 2, 18)!)).toMatchObject({ hours: 2 });
     expect(summary.byDate.get(fiscalCellKey(2026, 5, 25)!)).toMatchObject({ code: "H" });
+  });
+});
+
+describe("weekday lists read as prose", () => {
+  it("names a single day in the plural", () => {
+    expect(formatWeekdays([2])).toBe("Tuesdays");
+  });
+
+  it("joins two days with an ampersand", () => {
+    expect(formatWeekdays([2, 4])).toBe("Tuesdays & Thursdays");
+  });
+
+  it("sorts and de-duplicates whatever order it is given", () => {
+    expect(formatWeekdays([4, 1, 4])).toBe("Mondays & Thursdays");
+  });
+
+  it("uses commas for three", () => {
+    expect(formatWeekdays([1, 3, 5])).toBe("Mondays, Wednesdays & Fridays");
+  });
+
+  it("shortens past three days, where full names stop being readable", () => {
+    expect(formatWeekdays([1, 2, 3, 4])).toBe("Mon, Tue, Wed & Thu");
+  });
+
+  it("says so rather than printing undefined for an empty or junk list", () => {
+    expect(formatWeekdays([])).toBe("No days");
+    expect(formatWeekdays([9, -1])).toBe("No days");
   });
 });

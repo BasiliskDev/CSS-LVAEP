@@ -3,7 +3,7 @@ import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
 import { Badge, Card, CardHeader, EmptyState } from "@/components/ui";
 import { prisma } from "@/lib/db";
-import { formatDateDisplay } from "@/lib/fiscal-year";
+import { formatDateDisplay, formatWeekdays } from "@/lib/fiscal-year";
 import { requireAdmin } from "@/lib/guards";
 import { countOccurrences } from "@/lib/recurrence";
 import { formatTimeRange } from "@/lib/time-slot";
@@ -11,8 +11,6 @@ import { NewSessionPanel } from "./new-session-panel";
 import type { SessionTutor } from "./session-form";
 
 export const metadata = { title: "Sessions — TutorLog" };
-
-const WEEKDAY_NAMES = ["Sundays", "Mondays", "Tuesdays", "Wednesdays", "Thursdays", "Fridays", "Saturdays"];
 
 export default async function AdminSessionsPage() {
   const user = await requireAdmin();
@@ -34,7 +32,7 @@ export default async function AdminSessionsPage() {
     }),
     prisma.site.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
     prisma.scheduledSession.findMany({
-      orderBy: [{ status: "asc" }, { weekday: "asc" }, { startTime: "asc" }],
+      orderBy: [{ status: "asc" }, { startTime: "asc" }, { startsOn: "asc" }],
       include: {
         tutor: { select: { displayName: true } },
         site: { select: { name: true } },
@@ -72,20 +70,21 @@ export default async function AdminSessionsPage() {
         <div className="space-y-3">
           {active.map((session) => {
             const occurrences = countOccurrences({
-              weekday: session.weekday,
+              weekdays: session.weekdays,
               startsOn: session.startsOn,
               endsOn: session.endsOn,
             });
+            const days = formatWeekdays(session.weekdays);
 
             return (
               <Card key={session.id}>
                 <CardHeader
                   title={
                     <Link href={`/admin/sessions/${session.id}`} className="hover:text-brand">
-                      {session.title ?? `${WEEKDAY_NAMES[session.weekday]} with ${session.tutor.displayName}`}
+                      {session.title ?? `${days} with ${session.tutor.displayName}`}
                     </Link>
                   }
-                  description={`${WEEKDAY_NAMES[session.weekday]} ${formatTimeRange(session.startTime, session.endTime)} · ${formatDateDisplay(session.startsOn)} – ${formatDateDisplay(session.endsOn)}`}
+                  description={`${days} ${formatTimeRange(session.startTime, session.endTime)} · ${formatDateDisplay(session.startsOn)} – ${formatDateDisplay(session.endsOn)}`}
                   action={
                     <span className="flex flex-wrap items-center gap-2">
                       {session.students.length === 0 ? (
@@ -129,7 +128,7 @@ export default async function AdminSessionsPage() {
               {archived.map((session) => (
                 <li key={session.id} className="flex flex-wrap items-center gap-2 px-5 py-3 text-sm">
                   <Link href={`/admin/sessions/${session.id}`} className="text-ink hover:text-brand">
-                    {session.title ?? `${WEEKDAY_NAMES[session.weekday]} with ${session.tutor.displayName}`}
+                    {session.title ?? `${formatWeekdays(session.weekdays)} with ${session.tutor.displayName}`}
                   </Link>
                   <span className="text-muted">
                     {formatTimeRange(session.startTime, session.endTime)}

@@ -92,7 +92,7 @@ provider-specific code is in [`src/lib/email.ts`](src/lib/email.ts).
 | `/admin` | **Office.** Every tutor and student, plus the pool of unassigned students waiting to be given to a tutor. Requires an `ADMIN` account. |
 | `/admin/invites` | Create, resend and revoke invites. Each open invite shows its copyable link. |
 | `/admin/students/new` | Create a student and assign them to a tutor. Only the office can do this. |
-| `/admin/sessions` | Weekly sessions: a tutor, a weekday, a time slot, a date range and a set of students. |
+| `/admin/sessions` | Weekly sessions: a tutor, one or more weekdays, a time slot, a set of students, and an end — either a last date or a number of meetings. |
 | `/admin/sessions/[id]` | Edit a session, change who is in it, and cancel individual dates. |
 | `/sessions/[id]/[date]` | One occurrence, every student, one submit — where a tutor logs a scheduled session. |
 
@@ -118,11 +118,29 @@ one column, so the whole history comes along untouched.
 
 ### Scheduled sessions and the hours reminder
 
-A session is a weekly rule — *Tutor Tony, Thursdays 5:30–6:30 PM, Sep 1 to Jan 19,
-students Nicky and Bonito* — not a pile of rows. Occurrences are computed from the rule by
-`src/lib/recurrence.ts` and never stored, so editing the series is never a reconciliation
-problem. A single date can be cancelled (a holiday, a closure) without touching the rest,
-optionally stamping the paper form's own `H` on each student's sheet.
+A session is a weekly rule — *Tutor Tony, Tuesdays and Thursdays 5:30–6:30 PM, Sep 1 to
+Jan 19, students Nicky and Bonito* — not a pile of rows. Occurrences are computed from the
+rule by `src/lib/recurrence.ts` and never stored, so editing the series is never a
+reconciliation problem. A single date can be cancelled (a holiday, a closure) without
+touching the rest, optionally stamping the paper form's own `H` on each student's sheet.
+
+**Recurrence, the way a calendar app does it.** A series repeats on any combination of
+weekdays — tick Tue and Thu and it meets twice a week — and it ends either on a date or
+after a set number of meetings. The form previews what the rule produces ("10 meetings ·
+Sep 1, 2026 – Oct 1, 2026") before anything is saved.
+
+Both endings are stored the same way: `endsOn` always holds the real last date, and a
+count is resolved to that date on save. `endMode` and `occurrenceCount` record only *how
+the office expressed it*, so editing a series reopens the control they actually used.
+That keeps every range query, index and membership check working on two plain columns
+rather than branching on the end mode — and `nthOccurrence` is tested to agree with
+`weeklyOccurrences` at every position, so "after 12 meetings" cannot store a date that
+yields some other number.
+
+Two of a calendar app's options are deliberately missing. There is no *repeats every N
+weeks* (nobody asked, and it multiplies the cases to test), and no *never ends* — an
+unbounded series would defeat the 18-month span cap that stops a mistyped year scheduling
+sessions into the 2040s, and the club works in terms.
 
 Occurrences show on `/calendar` as dashed outlines until their hours are logged, so a
 glance distinguishes what was *meant* to happen from what did.

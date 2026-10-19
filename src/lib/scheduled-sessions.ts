@@ -49,8 +49,12 @@ const SERIES_INCLUDE = {
   skips: { select: { date: true, reason: true } },
 } as const;
 
-function ruleOf(series: { weekday: number; startsOn: Date; endsOn: Date }): WeeklyRule {
-  return { weekday: series.weekday, startsOn: series.startsOn, endsOn: series.endsOn };
+export function ruleOf(series: {
+  weekdays: number[];
+  startsOn: Date;
+  endsOn: Date;
+}): WeeklyRule {
+  return { weekdays: series.weekdays, startsOn: series.startsOn, endsOn: series.endsOn };
 }
 
 /**
@@ -170,7 +174,7 @@ export async function getPendingSessions(tutorId: string, now = new Date()): Pro
   const pending = missingOccurrences({
     series: series.map((entry) => ({
       id: entry.id,
-      weekday: entry.weekday,
+      weekdays: entry.weekdays,
       startTime: entry.startTime,
       endTime: entry.endTime,
       startsOn: entry.startsOn,

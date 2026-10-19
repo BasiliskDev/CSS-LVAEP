@@ -5,15 +5,13 @@ import { ReassignStudent } from "@/components/reassign-student";
 import { Badge, ButtonLink, Card, CardHeader, EmptyState, StatTile } from "@/components/ui";
 import { hasSlotEnded } from "@/lib/club-time";
 import { prisma } from "@/lib/db";
-import { formatDateDisplay, formatDateInput, todayUTC } from "@/lib/fiscal-year";
+import { formatDateDisplay, formatDateInput, formatWeekdays, todayUTC } from "@/lib/fiscal-year";
 import { requireAdmin } from "@/lib/guards";
 import { addDaysUTC, occurrencesBetween, weeklyOccurrences } from "@/lib/recurrence";
 import { getUnassignedStudents, summarize, type StudentSummary } from "@/lib/students";
 import { formatTimeRange } from "@/lib/time-slot";
 
 export const metadata = { title: "Office — TutorLog" };
-
-const WEEKDAYS = ["Sundays", "Mondays", "Tuesdays", "Wednesdays", "Thursdays", "Fridays", "Saturdays"];
 
 /**
  * The office's control panel: who tutors, what they are scheduled to run, and whether
@@ -57,11 +55,11 @@ export default async function AdminPage() {
         },
         scheduledSessions: {
           where: { status: "ACTIVE" },
-          orderBy: [{ weekday: "asc" }, { startTime: "asc" }],
+          orderBy: [{ startTime: "asc" }, { startsOn: "asc" }],
           select: {
             id: true,
             title: true,
-            weekday: true,
+            weekdays: true,
             startTime: true,
             endTime: true,
             startsOn: true,
@@ -90,7 +88,7 @@ export default async function AdminPage() {
     const students: StudentSummary[] = tutor.students.map(summarize);
 
     const sessions = tutor.scheduledSessions.map((session) => {
-      const rule = { weekday: session.weekday, startsOn: session.startsOn, endsOn: session.endsOn };
+      const rule = { weekdays: session.weekdays, startsOn: session.startsOn, endsOn: session.endsOn };
       const skipped = new Set(session.skips.map((skip) => formatDateInput(skip.date)));
       const logged = new Set(
         session.lessons.map((lesson) => `${formatDateInput(lesson.date)}|${lesson.studentId}`),
@@ -110,7 +108,7 @@ export default async function AdminPage() {
 
       return {
         id: session.id,
-        weekday: session.weekday,
+        weekdays: session.weekdays,
         startTime: session.startTime,
         endTime: session.endTime,
         students: session.students.map((membership) => membership.student),
@@ -284,7 +282,7 @@ export default async function AdminPage() {
                           href={`/admin/sessions/${session.id}`}
                           className="text-sm font-medium text-ink hover:text-brand"
                         >
-                          {WEEKDAYS[session.weekday]}{" "}
+                          {formatWeekdays(session.weekdays)}{" "}
                           {formatTimeRange(session.startTime, session.endTime)}
                         </Link>
                         <span className="text-sm text-muted">

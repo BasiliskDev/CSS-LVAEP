@@ -279,11 +279,13 @@ describe("scheduled sessions", () => {
   const base = {
     tutorId: "t1",
     title: null,
-    weekday: 2,
+    weekdays: ["2"],
     startTime: "17:30",
     endTime: "18:30",
     startsOn: "2026-09-01",
     endsOn: "2027-01-19",
+    endMode: "ON_DATE",
+    occurrenceCount: null,
     siteId: null,
     notes: null,
     studentIds: ["s1", "s2"],
@@ -336,6 +338,100 @@ describe("scheduled sessions", () => {
   });
 
   it("rejects a weekday outside the week", () => {
-    expect(scheduledSessionSchema.safeParse({ ...base, weekday: 7 }).success).toBe(false);
+    expect(scheduledSessionSchema.safeParse({ ...base, weekdays: ["7"] }).success).toBe(false);
+  });
+
+  it("needs at least one day of the week", () => {
+    // An untouched day picker posts nothing at all, which must be a field error rather
+    // than a series that never meets.
+    const parsed = scheduledSessionSchema.safeParse({ ...base, weekdays: [] });
+    expect(parsed.success).toBe(false);
+    expect(fieldErrors(parsed)).toEqual({ weekdays: "Pick at least one day of the week" });
+  });
+
+  it("accepts the absent day list FormData yields when nothing is checked", () => {
+    expect(scheduledSessionSchema.safeParse({ ...base, weekdays: null }).success).toBe(false);
+  });
+
+  it("takes several days and normalises them", () => {
+    // getAll gives strings, in DOM order, and a duplicate is possible. What reaches the
+    // database must be ascending and distinct.
+    const parsed = scheduledSessionSchema.safeParse({ ...base, weekdays: ["4", "2", "2"] });
+    expect(parsed.success).toBe(true);
+    expect(parsed.success && parsed.data.weekdays).toEqual([2, 4]);
+  });
+
+  it("rejects a range that misses every day picked", () => {
+    // Mondays, between a Tuesday and the Thursday of the same week: no Monday exists in
+    // there, so the series would never meet.
+    const parsed = scheduledSessionSchema.safeParse({
+      ...base,
+      weekdays: ["1"],
+      startsOn: "2026-09-01",
+      endsOn: "2026-09-03",
+    });
+    expect(parsed.success).toBe(false);
+    expect(fieldErrors(parsed)).toEqual({
+      endsOn: "That range contains none of the days you picked",
+    });
+  });
+
+  describe("ending after a number of meetings", () => {
+    const byCount = {
+      ...base,
+      endMode: "AFTER_COUNT",
+      endsOn: null,
+      occurrenceCount: "10",
+    };
+
+    it("turns the count into a concrete last date", () => {
+      // 10 Tuesdays from Sep 1 is Nov 3. The count is the office's input; the date is
+      // what gets stored, because every query downstream reads endsOn.
+      const parsed = scheduledSessionSchema.safeParse(byCount);
+      expect(parsed.success).toBe(true);
+      expect(parsed.success && parsed.data.endsOn).toEqual(new Date("2026-11-03T00:00:00.000Z"));
+      expect(parsed.success && parsed.data.occurrenceCount).toBe(10);
+    });
+
+    it("spreads the count across every day picked", () => {
+      // 10 meetings on Tue *and* Thu is five weeks, not ten.
+      const parsed = scheduledSessionSchema.safeParse({ ...byCount, weekdays: ["2", "4"] });
+      expect(parsed.success).toBe(true);
+      expect(parsed.success && parsed.data.endsOn).toEqual(new Date("2026-10-01T00:00:00.000Z"));
+    });
+
+    it("does not need a last date", () => {
+      // The date input isn't rendered in this mode, so FormData has no endsOn at all.
+      const withoutEndsOn: Record<string, unknown> = { ...byCount };
+      delete withoutEndsOn.endsOn;
+      expect(scheduledSessionSchema.safeParse(withoutEndsOn).success).toBe(true);
+    });
+
+    it("keeps occurrenceCount null when the office ended on a date", () => {
+      const parsed = scheduledSessionSchema.safeParse({ ...base, occurrenceCount: "99" });
+      expect(parsed.success).toBe(true);
+      expect(parsed.success && parsed.data.occurrenceCount).toBeNull();
+    });
+
+    it("needs a count in this mode", () => {
+      const parsed = scheduledSessionSchema.safeParse({ ...byCount, occurrenceCount: null });
+      expect(parsed.success).toBe(false);
+      expect(fieldErrors(parsed)).toEqual({
+        occurrenceCount: "Enter how many meetings there are",
+      });
+    });
+
+    it("rejects zero and negative counts", () => {
+      expect(scheduledSessionSchema.safeParse({ ...byCount, occurrenceCount: "0" }).success).toBe(false);
+      expect(scheduledSessionSchema.safeParse({ ...byCount, occurrenceCount: "-4" }).success).toBe(false);
+    });
+
+    it("blames the count, not the date, when the span is too long", () => {
+      // 300 weekly meetings is nearly six years. The span cap has to catch it, and the
+      // error has to land on the field the office actually filled in.
+      const parsed = scheduledSessionSchema.safeParse({ ...byCount, occurrenceCount: "300" });
+      expect(parsed.success).toBe(false);
+      expect(Object.keys(fieldErrors(parsed))).toEqual(["occurrenceCount"]);
+    });
   });
 });

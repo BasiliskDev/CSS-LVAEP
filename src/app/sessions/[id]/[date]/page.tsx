@@ -9,6 +9,7 @@ import { prisma } from "@/lib/db";
 import { formatDateDisplay, parseDateInput } from "@/lib/fiscal-year";
 import { requireScheduledSession } from "@/lib/guards";
 import { isOccurrence } from "@/lib/recurrence";
+import { ruleOf } from "@/lib/scheduled-sessions";
 import { formatTimeRange, hoursBetween } from "@/lib/time-slot";
 
 export const metadata = { title: "Log session hours — TutorLog" };
@@ -21,7 +22,7 @@ export default async function LogSessionPage({ params }: PageProps<"/sessions/[i
   // A date that isn't part of this series is a 404, not an error page: the URL shouldn't
   // behave as though some other occurrence might exist there.
   if (!date) notFound();
-  if (!isOccurrence({ weekday: series.weekday, startsOn: series.startsOn, endsOn: series.endsOn }, date)) {
+  if (!isOccurrence(ruleOf(series), date)) {
     notFound();
   }
 

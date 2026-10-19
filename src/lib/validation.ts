@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { lessonStatusSchema, userRoleSchema } from "./constants";
 import { parseDateInput } from "./fiscal-year";
+import { MAX_OCCURRENCES, countOccurrences, nthOccurrence, normalizeWeekdays } from "./recurrence";
 import { hoursBetween, parseTimeInput } from "./time-slot";
 
 /** Shared shapes for every server action. Parsed server-side; the client is never trusted. */
@@ -231,24 +232,51 @@ export const removeStudentSchema = z.object({
 /** Long enough for a school year and a bit; short enough that a typo'd year is caught. */
 const MAX_SERIES_MONTHS = 18;
 
+/** How the office ended the series. "Never" is deliberately absent — see the schema. */
+export const sessionEndModeSchema = z.enum(["ON_DATE", "AFTER_COUNT"]);
+export type SessionEndMode = z.infer<typeof sessionEndModeSchema>;
+
 /**
  * A recurring session. Mirrors lessonSchema: the cross-field rules live in a transform
- * so a bad slot or an inverted range reads back as a field error rather than throwing.
+ * so a bad slot, an inverted range or an impossible day combination reads back as a
+ * field error rather than throwing.
+ *
+ * The transform always produces a concrete `endsOn`, whichever way the office ended the
+ * series, so callers never have to care which mode was used. Both end modes then pass
+ * through the same span cap, which is what keeps "after 400 meetings" from quietly
+ * scheduling a decade.
  */
 export const scheduledSessionSchema = z
   .object({
     tutorId: z.string().trim().min(1, "Choose a tutor"),
     title: optionalText(120),
-    weekday: z.coerce.number().int().min(0, "Pick a day").max(6, "Pick a day"),
+    // One checkbox per day, so an unchecked set posts nothing at all.
+    weekdays: z
+      .array(z.coerce.number().int().min(0).max(6))
+      .nullish()
+      .transform((value) => value ?? []),
     startTime: z.string().trim(),
     endTime: z.string().trim(),
     startsOn: dateInput,
-    endsOn: dateInput,
+    // Absent when the office ended the series by count, so it cannot be required here.
+    endsOn: dateInput.nullish(),
+    endMode: sessionEndModeSchema.nullish().transform((value) => value ?? "ON_DATE"),
+    occurrenceCount: z.coerce.number().int().nullish(),
     siteId: z.string().trim().nullish(),
     notes: optionalText(2000),
     studentIds: z.array(z.string().trim().min(1)).min(1, "Pick at least one student"),
   })
   .transform((data, ctx) => {
+    const weekdays = normalizeWeekdays(data.weekdays);
+    if (weekdays.length === 0) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Pick at least one day of the week",
+        path: ["weekdays"],
+      });
+      return z.NEVER;
+    }
+
     if (parseTimeInput(data.startTime) === null) {
       ctx.addIssue({ code: "custom", message: "Enter a valid time", path: ["startTime"] });
       return z.NEVER;
@@ -276,29 +304,96 @@ export const scheduledSessionSchema = z
       return z.NEVER;
     }
 
-    if (data.endsOn < data.startsOn) {
-      ctx.addIssue({
-        code: "custom",
-        message: "The last date is before the first one",
-        path: ["endsOn"],
-      });
-      return z.NEVER;
+    // Resolve whichever end the office chose down to a single last date. Everything
+    // after this point is mode-agnostic.
+    let endsOn: Date;
+    let occurrenceCount: number | null = null;
+
+    if (data.endMode === "AFTER_COUNT") {
+      const count = data.occurrenceCount;
+      if (count === null || count === undefined || Number.isNaN(count)) {
+        ctx.addIssue({
+          code: "custom",
+          message: "Enter how many meetings there are",
+          path: ["occurrenceCount"],
+        });
+        return z.NEVER;
+      }
+      if (count < 1) {
+        ctx.addIssue({
+          code: "custom",
+          message: "A session needs at least one meeting",
+          path: ["occurrenceCount"],
+        });
+        return z.NEVER;
+      }
+      if (count > MAX_OCCURRENCES) {
+        ctx.addIssue({
+          code: "custom",
+          message: `That is more than ${MAX_OCCURRENCES} meetings — check the number`,
+          path: ["occurrenceCount"],
+        });
+        return z.NEVER;
+      }
+
+      const last = nthOccurrence(data.startsOn, weekdays, count);
+      if (!last) {
+        ctx.addIssue({
+          code: "custom",
+          message: "Those days and that count don't produce any dates",
+          path: ["occurrenceCount"],
+        });
+        return z.NEVER;
+      }
+      endsOn = last;
+      occurrenceCount = count;
+    } else {
+      if (!data.endsOn) {
+        ctx.addIssue({ code: "custom", message: "Enter a last date", path: ["endsOn"] });
+        return z.NEVER;
+      }
+      if (data.endsOn < data.startsOn) {
+        ctx.addIssue({
+          code: "custom",
+          message: "The last date is before the first one",
+          path: ["endsOn"],
+        });
+        return z.NEVER;
+      }
+      endsOn = data.endsOn;
     }
 
-    // A mistyped year would otherwise schedule sessions for decades.
+    // Which field to blame depends on which one the office actually filled in.
+    const endPath = data.endMode === "AFTER_COUNT" ? ["occurrenceCount"] : ["endsOn"];
+
+    // A mistyped year, or a four-digit meeting count, would otherwise schedule sessions
+    // for decades. Applied to the resolved date, so it covers both modes at once.
     const months =
-      (data.endsOn.getUTCFullYear() - data.startsOn.getUTCFullYear()) * 12 +
-      (data.endsOn.getUTCMonth() - data.startsOn.getUTCMonth());
+      (endsOn.getUTCFullYear() - data.startsOn.getUTCFullYear()) * 12 +
+      (endsOn.getUTCMonth() - data.startsOn.getUTCMonth());
     if (months > MAX_SERIES_MONTHS) {
       ctx.addIssue({
         code: "custom",
-        message: `A session can run for at most ${MAX_SERIES_MONTHS} months — check the year`,
-        path: ["endsOn"],
+        message: `A session can run for at most ${MAX_SERIES_MONTHS} months — check the ${
+          data.endMode === "AFTER_COUNT" ? "number of meetings" : "year"
+        }`,
+        path: endPath,
       });
       return z.NEVER;
     }
 
-    return { ...data, hours };
+    // A date range can miss every chosen day entirely ("Mondays, Tue 1st to Thu 3rd").
+    // Counting is cheap and the alternative is a series that silently never meets.
+    if (countOccurrences({ weekdays, startsOn: data.startsOn, endsOn }) === 0) {
+      ctx.addIssue({
+        code: "custom",
+        message: "That range contains none of the days you picked",
+        path: endPath,
+      });
+      return z.NEVER;
+    }
+
+    return { ...data, weekdays, endsOn, endMode: data.endMode, occurrenceCount, hours };
   });
 
 export const sessionSkipSchema = z.object({

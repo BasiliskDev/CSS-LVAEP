@@ -232,8 +232,8 @@ model Invite {
   @@index([invitedById])
 }
 
-/// A recurring weekly tutoring session, scheduled by the office: one tutor, one weekday,
-/// one time slot, one date range, a set of students.
+/// A recurring weekly tutoring session, scheduled by the office: one tutor, one or more
+/// weekdays, one time slot, one date range, a set of students.
 ///
 /// Occurrences are computed from this rule by src/lib/recurrence.ts and never stored.
 /// Materialising them would make every edit to the series a reconciliation problem, and
@@ -244,14 +244,26 @@ model ScheduledSession {
   siteId  String?
   title   String?
 
-  /// 0 = Sunday … 6 = Saturday, matching Date#getUTCDay() and WEEKDAY_LABELS.
-  weekday   Int
+  /// Which days of the week it repeats on: 0 = Sunday … 6 = Saturday, matching
+  /// Date#getUTCDay() and WEEKDAY_LABELS. At least one, ascending and distinct —
+  /// src/lib/recurrence.ts normalises on the way in and tolerates neither being true.
+  weekdays  Int[]
   /// The club's wall clock as "HH:MM", exactly like Lesson.startTime/endTime.
   startTime String
   endTime   String
-  /// Both UTC midnight, both inclusive.
+  /// Both UTC midnight, both inclusive. `endsOn` is always the real last date, even when
+  /// the office entered a number of meetings instead — the count is resolved to a date
+  /// before it is stored, so every range query and index here works on two columns.
   startsOn  DateTime
   endsOn    DateTime
+
+  /// Which control the office used to end the series: ON_DATE | AFTER_COUNT. Purely a
+  /// record of intent, so editing a series reopens the form the way they filled it in.
+  endMode         String @default("ON_DATE")
+  /// The number of meetings they asked for, when endMode is AFTER_COUNT. Null otherwise.
+  /// Not authoritative: cancelling a date leaves the count as the office's *intent*
+  /// while `endsOn` stays put, which is how Google Calendar behaves too.
+  occurrenceCount Int?
 
   status String  @default("ACTIVE") // ACTIVE | ARCHIVED
   notes  String?
